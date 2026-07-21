@@ -21,7 +21,16 @@ export async function POST(request: Request) {
   })
 
   if (authError || !authData.user) {
-    return NextResponse.json({ error: authError?.message ?? 'Signup failed' }, { status: 400 })
+    // Don't confirm or deny that a specific email already has an account —
+    // that's a real information leak (user enumeration), not just a
+    // cosmetic wording issue. Other errors (weak password, etc.) still
+    // pass through normally.
+    const isDuplicateEmail = authError?.message?.toLowerCase().includes('already been registered')
+    const message = isDuplicateEmail
+      ? 'Could not create an account with these details. If you already have an account, try logging in instead.'
+      : authError?.message ?? 'Signup failed'
+
+    return NextResponse.json({ error: message }, { status: 400 })
   }
 
   const slug = tenantName.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40)
