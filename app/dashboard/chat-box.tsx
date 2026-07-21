@@ -17,9 +17,11 @@ interface Message {
 export default function ChatBox({
   activeConversationId,
   onConversationChange,
+  scopedDocumentIds,
 }: {
   activeConversationId: string | null
   onConversationChange: (id: string) => void
+  scopedDocumentIds: string[] | null
 }) {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
@@ -42,8 +44,6 @@ export default function ChatBox({
         .eq('conversation_id', activeConversationId)
         .order('created_at', { ascending: true })
 
-      // If a newer click happened while this fetch was in flight, this
-      // result is stale — don't let it overwrite what should be showing.
       if (!cancelled) {
         setMessages((data as Message[]) ?? [])
       }
@@ -73,7 +73,11 @@ export default function ChatBox({
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: userMessage, conversationId: activeConversationId }),
+        body: JSON.stringify({
+          message: userMessage,
+          conversationId: activeConversationId,
+          documentIds: activeConversationId ? undefined : scopedDocumentIds,
+        }),
       })
 
       if (!res.ok) {
@@ -96,8 +100,11 @@ export default function ChatBox({
     <div className="flex flex-col h-full">
       <div className="flex-1 overflow-y-auto px-8 py-6 space-y-5">
         {messages.length === 0 && !loading && (
-          <div className="h-full flex items-center justify-center text-text-muted">
+          <div className="h-full flex flex-col items-center justify-center gap-2 text-text-muted text-center">
             <p className="font-display text-2xl">Ask something about your documents</p>
+            {scopedDocumentIds && (
+              <p className="text-xs text-source">This chat is focused on {scopedDocumentIds.length} selected document(s)</p>
+            )}
           </div>
         )}
 

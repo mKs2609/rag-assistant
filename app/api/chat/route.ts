@@ -58,7 +58,7 @@ export async function POST(request: Request) {
     )
   }
 
-  const { message, conversationId } = await request.json()
+  const { message, conversationId, documentIds } = await request.json()
 
   if (!message || typeof message !== 'string' || !message.trim()) {
     return NextResponse.json({ error: 'Message is required' }, { status: 400 })
@@ -82,6 +82,7 @@ export async function POST(request: Request) {
         tenant_id: profile.tenant_id,
         user_id: user.id,
         title: message.slice(0, 60),
+        document_ids: documentIds && documentIds.length > 0 ? documentIds : null,
       })
       .select()
       .single()
@@ -99,6 +100,19 @@ export async function POST(request: Request) {
     content: message,
   })
 
+  // Figure out which documents this conversation is scoped to — either the
+  // ones just picked for a new chat, or whatever was already saved on an
+  // existing one. Null means "search everything," same as before.
+  let scopedDocumentIds: string[] | null = documentIds && documentIds.length > 0 ? documentIds : null
+  if (conversationId && !scopedDocumentIds) {
+    const { data: existingConvo } = await supabase
+      .from('conversations')
+      .select('document_ids')
+      .eq('id', conversationId)
+      .single()
+    scopedDocumentIds = existingConvo?.document_ids ?? null
+  }
+
   let matches: { id: string; document_id: string; content: string; filename: string }[] = []
   let retrievalFailed = false
   try {
@@ -107,6 +121,7 @@ export async function POST(request: Request) {
       query_embedding: queryEmbedding,
       match_tenant_id: profile.tenant_id,
       match_count: 5,
+      filter_document_ids: scopedDocumentIds,
     })
     if (error) throw new Error(error.message)
     matches = data ?? []
