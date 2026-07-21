@@ -71,6 +71,12 @@ export default function SignupPage() {
           {loading ? 'Creating…' : 'Create workspace'}
         </button>
       </form>
+      <p className="text-sm text-center text-gray-500">
+        Already have an account?{' '}
+        <a href="/login" className="text-black underline">
+          Log in
+        </a>
+      </p>
     </div>
   )
 }
