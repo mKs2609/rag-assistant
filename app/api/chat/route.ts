@@ -143,14 +143,44 @@ export async function POST(request: Request) {
   let retrievalFailed = false
   try {
     const queryEmbedding = await embedQuery(message)
-    const { data, error } = await supabase.rpc('match_document_chunks', {
-      query_embedding: queryEmbedding,
-      match_tenant_id: profile.tenant_id,
-      match_count: 5,
-      filter_document_ids: scopedDocumentIds,
-    })
-    if (error) throw new Error(error.message)
-    matches = data ?? []
+
+    // Run meaning-based (vector) and exact-word (keyword) search at the
+    // same time — they're good at different things, so combining them
+    // catches more than either alone (e.g. exact codes/IDs vs. paraphrased
+    // questions).
+    const [vectorResult, keywordResult] = await Promise.all([
+      supabase.rpc('match_document_chunks', {
+        query_embedding: queryEmbedding,
+        match_tenant_id: profile.tenant_id,
+        match_count: 5,
+        filter_document_ids: scopedDocumentIds,
+      }),
+      supabase.rpc('match_document_chunks_keyword', {
+        search_query: message,
+        match_tenant_id: profile.tenant_id,
+        match_count: 5,
+        filter_document_ids: scopedDocumentIds,
+      }),
+    ])
+
+    if (vectorResult.error) throw new Error(vectorResult.error.message)
+    // Keyword search errors are logged but not fatal — plainto_tsquery can
+    // occasionally choke on unusual input, and vector search alone is
+    // still a perfectly good fallback.
+    if (keywordResult.error) console.error('Keyword search failed:', keywordResult.error.message)
+
+    const vectorMatches = vectorResult.data ?? []
+    const keywordMatches = keywordResult.data ?? []
+
+    const seen = new Set<string>()
+    const combined: typeof vectorMatches = []
+    for (const m of [...vectorMatches, ...keywordMatches]) {
+      if (!seen.has(m.id)) {
+        seen.add(m.id)
+        combined.push(m)
+      }
+    }
+    matches = combined.slice(0, 6)
   } catch (err) {
     console.error('Retrieval failed:', err)
     retrievalFailed = true
