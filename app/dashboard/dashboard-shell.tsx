@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { createClient } from '@/lib/supabase/client'
 import ConversationList from './conversation-list'
 import ChatBox from './chat-box'
 import DocumentUpload from './document-upload'
@@ -24,11 +25,28 @@ export default function DashboardShell({
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [pendingDocumentIds, setPendingDocumentIds] = useState<string[]>([])
-  const [confirmedDocumentIds, setConfirmedDocumentIds] = useState<string[] | null>(null)
+  const [scopedDocumentIds, setScopedDocumentIds] = useState<string[] | null>(null)
+  const supabase = createClient()
 
-  function handleSelectConversation(id: string | null) {
+  const scopedDocumentNames = scopedDocumentIds
+    ? documents.filter((d) => scopedDocumentIds.includes(d.id)).map((d) => d.filename)
+    : null
+
+  async function handleSelectConversation(id: string | null) {
     setActiveConversationId(id)
-    setConfirmedDocumentIds(null)
+
+    if (!id) {
+      setScopedDocumentIds(null)
+      return
+    }
+
+    const { data } = await supabase
+      .from('conversations')
+      .select('document_ids')
+      .eq('id', id)
+      .single()
+
+    setScopedDocumentIds(data?.document_ids ?? null)
   }
 
   function toggleDocument(id: string) {
@@ -39,7 +57,7 @@ export default function DashboardShell({
 
   function handleStartChat() {
     setActiveConversationId(null)
-    setConfirmedDocumentIds(pendingDocumentIds.length > 0 ? pendingDocumentIds : null)
+    setScopedDocumentIds(pendingDocumentIds.length > 0 ? pendingDocumentIds : null)
     setPendingDocumentIds([])
     setPickerOpen(false)
   }
@@ -90,7 +108,8 @@ export default function DashboardShell({
         <ChatBox
           activeConversationId={activeConversationId}
           onConversationChange={setActiveConversationId}
-          scopedDocumentIds={confirmedDocumentIds}
+          scopedDocumentIds={scopedDocumentIds}
+          scopedDocumentNames={scopedDocumentNames}
         />
       </main>
     </div>
