@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 interface Source {
   filename: string
   snippet: string
+  verified: boolean | null
 }
 
 interface Message {
@@ -139,8 +140,18 @@ export default function ChatBox({
                 <div className="mt-2 space-y-1.5">
                   {m.sources.map((s, j) => (
                     <div key={j} className="border-l-2 border-source pl-3 py-1 text-xs text-text-muted">
-                      <span className="font-mono text-source">[{j + 1}]</span>{' '}
-                      <span className="text-source">{s.filename}</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-mono text-source">[{j + 1}]</span>
+                        <span className="text-source">{s.filename}</span>
+                        {s.verified === true && (
+                          <span className="text-signal" title="This citation matches its source">✓ verified</span>
+                        )}
+                        {s.verified === false && (
+                          <span className="text-red-700" title="This citation's wording doesn't clearly match its source — worth double-checking">
+                            ⚠ unverified
+                          </span>
+                        )}
+                      </div>
                       <p className="mt-0.5">&quot;{s.snippet}...&quot;</p>
                     </div>
                   ))}

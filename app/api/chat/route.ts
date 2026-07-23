@@ -21,6 +21,37 @@ async function embedQuery(text: string): Promise<number[]> {
   return data.data[0].embedding
 }
 
+const STOPWORDS = new Set([
+  'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'to',
+  'of', 'in', 'on', 'at', 'for', 'with', 'by', 'from', 'as', 'and', 'or',
+  'but', 'if', 'this', 'that', 'it', 'its', 'has', 'have', 'had', 'not',
+  'no', 'do', 'does', 'did', 'can', 'will', 'would', 'could', 'should',
+  'their', 'they', 'he', 'she', 'you', 'your',
+])
+
+function significantWords(text: string): Set<string> {
+  return new Set(
+    text
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .split(/\s+/)
+      .filter((w) => w.length > 2 && !STOPWORDS.has(w))
+  )
+}
+
+// Free, no-API-call check: does the sentence making a claim actually share
+// enough meaningful words with the chunk it's citing? Doesn't prove the
+// claim is true, but catches a citation that clearly doesn't match its
+// source — the most common and most damaging failure mode.
+function isCitationGrounded(claimSentence: string, sourceContent: string): boolean {
+  const claimWords = significantWords(claimSentence)
+  if (claimWords.size === 0) return true
+
+  const sourceWords = significantWords(sourceContent)
+  const overlap = [...claimWords].filter((w) => sourceWords.has(w)).length
+  return overlap / claimWords.size >= 0.3
+}
+
 export async function POST(request: Request) {
   const supabase = await createClient()
 
@@ -38,9 +69,7 @@ export async function POST(request: Request) {
   if (!profile) {
     return NextResponse.json({ error: 'Profile not found' }, { status: 404 })
   }
-  // Rate limit: block if this user has sent too many messages recently.
-  // Checked before any Voyage or Gemini calls run, so a blocked request
-  // never spends money — it fails fast, before the expensive part.
+
   const RATE_LIMIT_MAX = 15
   const RATE_LIMIT_WINDOW_MS = 5 * 60 * 1000
 
@@ -100,9 +129,6 @@ export async function POST(request: Request) {
     content: message,
   })
 
-  // Figure out which documents this conversation is scoped to — either the
-  // ones just picked for a new chat, or whatever was already saved on an
-  // existing one. Null means "search everything," same as before.
   let scopedDocumentIds: string[] | null = documentIds && documentIds.length > 0 ? documentIds : null
   if (conversationId && !scopedDocumentIds) {
     const { data: existingConvo } = await supabase
@@ -130,8 +156,6 @@ export async function POST(request: Request) {
     retrievalFailed = true
   }
 
-  // Retrieved text is treated as reference material, never as instructions —
-  // this is the prompt-injection boundary from your original security list.
   const context = matches.length
     ? matches.map((m, i) => `[${i + 1}] (from "${m.filename}")\n${m.content}`).join('\n\n')
     : 'No relevant documents were found.'
@@ -172,6 +196,21 @@ ${context}`
     )
   }
 
+  // Check each citation the model actually used against its source chunk.
+  // true = checks out, false = doesn't check out, unset = never cited at all.
+  const verifiedFlags: Record<number, boolean> = {}
+  const sentences = answer.split(/(?<=[.!?])\s+/)
+
+  for (const sentence of sentences) {
+    const citationsInSentence = [...sentence.matchAll(/\[(\d+)\]/g)].map((m) => parseInt(m[1], 10))
+    for (const num of citationsInSentence) {
+      const match = matches[num - 1]
+      if (!match) continue
+      const grounded = isCitationGrounded(sentence, match.content)
+      verifiedFlags[num] = (verifiedFlags[num] ?? true) && grounded
+    }
+  }
+
   await supabase.from('messages').insert({
     tenant_id: profile.tenant_id,
     conversation_id: convoId,
@@ -183,7 +222,11 @@ ${context}`
   return NextResponse.json({
     conversationId: convoId,
     answer,
-    sources: matches.map((m) => ({ filename: m.filename, snippet: m.content.slice(0, 150) })),
+    sources: matches.map((m, i) => ({
+      filename: m.filename,
+      snippet: m.content.slice(0, 150),
+      verified: verifiedFlags[i + 1] ?? null,
+    })),
     retrievalFailed,
   })
 }
