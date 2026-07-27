@@ -5,7 +5,7 @@ import './globals.css'
 const fraunces = Fraunces({
   subsets: ['latin'],
   variable: '--font-display',
-  weight: ['400', '500', '600'],
+  weight: ['300', '400', '500', '600'],
 })
 
 const plexSans = IBM_Plex_Sans({

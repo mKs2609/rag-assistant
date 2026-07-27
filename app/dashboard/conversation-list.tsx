@@ -85,56 +85,61 @@ export default function ConversationList({
     }
   }
 
-  if (loading) return <p className="text-xs text-text-muted px-1">Loading…</p>
-  if (conversations.length === 0) return <p className="text-xs text-text-muted px-1">No conversations yet.</p>
-
   return (
-    <ul className="space-y-0.5">
-      {conversations.map((c) => (
-        <li
-          key={c.id}
-          onClick={() => editingId !== c.id && onSelect(c.id)}
-          className={
-            'group flex items-center gap-1 text-sm px-3 py-2 rounded-lg cursor-pointer transition-all duration-150 ' +
-            (c.id === activeConversationId
-              ? 'bg-surface-muted text-text font-medium'
-              : 'text-text-muted hover:bg-surface-muted')
-          }
-        >
-          {editingId === c.id ? (
-            <input
-              autoFocus
-              value={editValue}
-              onChange={(e) => setEditValue(e.target.value)}
-              onClick={(e) => e.stopPropagation()}
-              onBlur={() => handleRename(c.id)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleRename(c.id)
-                if (e.key === 'Escape') setEditingId(null)
-              }}
-              className="flex-1 bg-surface border border-signal rounded px-1 text-text outline-none"
-            />
-          ) : (
-            <span className="flex-1 truncate">{c.title || 'Untitled conversation'}</span>
-          )}
+    <div className="space-y-1">
+      <p className="text-xs font-bold text-bone uppercase tracking-wider">Conversations</p>
 
-          <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-            <button
-              onClick={(e) => startEditing(e, c)}
-              className="text-text-muted hover:text-signal text-xs"
+      {loading && <p className="text-xs text-bone/50 px-1">Loading…</p>}
+      {!loading && conversations.length === 0 && (
+        <p className="text-xs text-bone/50 px-1">No conversations yet.</p>
+      )}
+
+      {!loading && conversations.length > 0 && (
+        <ul className="space-y-0.5">
+          {conversations.map((c) => (
+            <li
+              key={c.id}
+              onClick={() => editingId !== c.id && onSelect(c.id)}
+              className={
+                'group flex items-center gap-1 text-sm px-3 py-2 cursor-pointer transition-all duration-150 ' +
+                (c.id === activeConversationId
+                  ? 'bg-bone/10 text-bone font-medium'
+                  : 'text-bone/50 hover:bg-bone/10 hover:text-bone')
+              }
             >
-              Rename
-            </button>
-            <button
-              onClick={(e) => handleDelete(e, c.id)}
-              disabled={deletingId === c.id}
-              className="text-red-700 hover:underline text-xs disabled:opacity-40"
-            >
-              {deletingId === c.id ? '…' : 'Delete'}
-            </button>
-          </div>
-        </li>
-      ))}
-    </ul>
+              {editingId === c.id ? (
+                <input
+                  autoFocus
+                  value={editValue}
+                  onChange={(e) => setEditValue(e.target.value)}
+                  onClick={(e) => e.stopPropagation()}
+                  onBlur={() => handleRename(c.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleRename(c.id)
+                    if (e.key === 'Escape') setEditingId(null)
+                  }}
+                  className="flex-1 bg-obsidian border border-ash px-1 text-bone outline-none"
+                />
+              ) : (
+                <span className="flex-1 truncate">{c.title || 'Untitled conversation'}</span>
+              )}
+
+              <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                <button onClick={(e) => startEditing(e, c)} className="text-bone/50 hover:text-bone text-xs">
+                  Rename
+                </button>
+                <button
+                  onClick={(e) => handleDelete(e, c.id)}
+                  disabled={deletingId === c.id}
+                  className="text-red-400 hover:underline text-xs disabled:opacity-40"
+                >
+                  {deletingId === c.id ? '…' : 'Delete'}
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   )
 }

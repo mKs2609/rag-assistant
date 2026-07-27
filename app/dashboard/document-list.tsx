@@ -10,9 +10,9 @@ interface Document {
 }
 
 const statusColor: Record<string, string> = {
-  ready: 'bg-signal',
-  processing: 'bg-source-dim',
-  failed: 'bg-red-500',
+  ready: 'bg-bone',
+  processing: 'bg-fog',
+  failed: 'bg-red-400',
 }
 
 export default function DocumentList({ documents }: { documents: Document[] }) {
@@ -38,20 +38,20 @@ export default function DocumentList({ documents }: { documents: Document[] }) {
 
   return (
     <div className="space-y-1">
-      <p className="text-xs font-medium text-text-muted uppercase tracking-wide">Documents</p>
-      {error && <p className="text-red-700 text-xs">{error}</p>}
+      <p className="text-xs font-bold text-bone uppercase tracking-wider">Documents</p>
+      {error && <p className="text-red-400 text-xs">{error}</p>}
       {documents.length ? (
         <ul className="space-y-0.5 max-h-32 overflow-y-auto">
           {documents.map((doc) => (
             <li key={doc.id} className="group flex items-center gap-2 px-1 py-1 text-xs">
-              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${statusColor[doc.status] ?? 'bg-text-muted'}`} />
-              <span className="flex-1 truncate text-text-muted" title={doc.filename}>
+              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${statusColor[doc.status] ?? 'bg-fog'}`} />
+              <span className="flex-1 truncate text-fog" title={doc.filename}>
                 {doc.filename}
               </span>
               <button
                 onClick={() => handleDelete(doc.id)}
                 disabled={deletingId === doc.id}
-                className="opacity-0 group-hover:opacity-100 text-red-700 hover:underline disabled:opacity-40 shrink-0 transition-opacity"
+                className="opacity-0 group-hover:opacity-100 text-red-400 hover:underline disabled:opacity-40 shrink-0 transition-opacity"
               >
                 {deletingId === doc.id ? '…' : 'Delete'}
               </button>
@@ -59,7 +59,7 @@ export default function DocumentList({ documents }: { documents: Document[] }) {
           ))}
         </ul>
       ) : (
-        <p className="text-xs text-text-muted">No documents yet.</p>
+        <p className="text-xs text-fog">No documents yet.</p>
       )}
     </div>
   )

@@ -100,14 +100,14 @@ export default function ChatBox({
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full bg-carbon">
       {scopedDocumentNames && scopedDocumentNames.length > 0 && (
-        <div className="border-b border-border bg-surface-muted px-8 py-2 flex items-center gap-2 text-xs flex-wrap">
-          <span className="font-medium text-source shrink-0">Focused on:</span>
+        <div className="px-8 py-2 flex items-center gap-2 text-xs flex-wrap">
+          <span className="font-medium text-pewter shrink-0">Focused on:</span>
           {scopedDocumentNames.map((name, i) => (
             <span
               key={i}
-              className="border border-source-dim rounded-full px-2 py-0.5 text-source truncate max-w-[180px]"
+              className="rounded px-2 py-0.5 text-slate bg-inkwell truncate max-w-[180px]"
               title={name}
             >
               {name}
@@ -116,10 +116,11 @@ export default function ChatBox({
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto px-8 py-6 space-y-5">
+      <div className="flex-1 overflow-y-auto px-8 py-10 space-y-6">
         {messages.length === 0 && !loading && (
-          <div className="h-full flex items-center justify-center text-text-muted">
-            <p className="font-display text-2xl">Ask something about your documents</p>
+          <div className="h-full flex flex-col items-center justify-center gap-2 text-center">
+            <p className="font-display text-4xl text-bone tracking-wide">Ask something</p>
+            <p className="text-sm text-pewter">about your documents</p>
           </div>
         )}
 
@@ -128,10 +129,10 @@ export default function ChatBox({
             <div className="max-w-[70%]">
               <div
                 className={
-                  'rounded-2xl px-4 py-3 text-[15px] leading-relaxed ' +
+                  'px-4 py-3 text-[15px] leading-relaxed rounded-lg shadow-[rgba(4,4,7,0.25)_0px_2px_4px_0px,rgba(4,4,7,0.4)_0px_8px_24px_0px] ' +
                   (m.role === 'user'
-                    ? 'bg-signal text-surface rounded-br-sm'
-                    : 'bg-surface-muted text-text rounded-bl-sm')
+                    ? 'bg-graphite-card text-bone'
+                    : 'bg-inkwell text-bone')
                 }
               >
                 {m.content}
@@ -139,20 +140,20 @@ export default function ChatBox({
               {m.sources && m.sources.length > 0 && (
                 <div className="mt-2 space-y-1.5">
                   {m.sources.map((s, j) => (
-                    <div key={j} className="border-l-2 border-source pl-3 py-1 text-xs text-text-muted">
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-mono text-source">[{j + 1}]</span>
-                        <span className="text-source">{s.filename}</span>
+                    <div key={j} className="rounded-lg px-3 py-2 text-xs bg-inkwell shadow-[rgba(0,0,0,0.12)_0px_12px_12px_0px]">
+                      <div className="flex items-center gap-1.5 text-pewter">
+                        <span className="font-mono text-[#c99a5b]">[{j + 1}]</span>
+                        <span className="text-bone">{s.filename}</span>
                         {s.verified === true && (
-                          <span className="text-signal" title="This citation matches its source">✓ verified</span>
+                          <span className="text-slate" title="This citation matches its source">✓ verified</span>
                         )}
                         {s.verified === false && (
-                          <span className="text-red-700" title="This citation's wording doesn't clearly match its source — worth double-checking">
+                          <span className="text-red-400" title="This citation's wording doesn't clearly match its source — worth double-checking">
                             ⚠ unverified
                           </span>
                         )}
                       </div>
-                      <p className="mt-0.5">&quot;{s.snippet}...&quot;</p>
+                      <p className="mt-0.5 text-pewter">&quot;{s.snippet}...&quot;</p>
                     </div>
                   ))}
                 </div>
@@ -163,36 +164,38 @@ export default function ChatBox({
 
         {loading && (
           <div className="flex justify-start animate-message-in">
-            <div className="bg-surface-muted rounded-2xl rounded-bl-sm px-4 py-3 flex gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-text-muted animate-bounce [animation-delay:-0.3s]" />
-              <span className="w-1.5 h-1.5 rounded-full bg-text-muted animate-bounce [animation-delay:-0.15s]" />
-              <span className="w-1.5 h-1.5 rounded-full bg-text-muted animate-bounce" />
+            <div className="bg-inkwell rounded-lg px-4 py-3 flex gap-1 shadow-[rgba(4,4,7,0.25)_0px_2px_4px_0px,rgba(4,4,7,0.4)_0px_8px_24px_0px]">
+              <span className="w-1.5 h-1.5 rounded-full bg-pewter animate-bounce [animation-delay:-0.3s]" />
+              <span className="w-1.5 h-1.5 rounded-full bg-pewter animate-bounce [animation-delay:-0.15s]" />
+              <span className="w-1.5 h-1.5 rounded-full bg-pewter animate-bounce" />
             </div>
           </div>
         )}
         <div ref={bottomRef} />
       </div>
 
-      {error && <p className="px-8 text-red-700 text-sm">{error}</p>}
+      {error && <p className="px-8 text-red-400 text-sm">{error}</p>}
 
-      <form onSubmit={handleSend} className="border-t border-border p-4">
-        <div className="flex gap-2 max-w-3xl mx-auto">
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask something about your documents..."
-            className="flex-1 border border-border rounded-full px-4 py-2.5 text-sm bg-surface focus:outline-none focus:border-signal transition-colors"
-          />
-          <button
-            type="submit"
-            disabled={loading || !input.trim()}
-            className="bg-text text-surface rounded-full px-5 py-2.5 text-sm disabled:opacity-40 hover:opacity-90 transition-opacity"
-          >
-            Send
-          </button>
-        </div>
-      </form>
+      <div className="p-6 flex justify-center">
+        <form onSubmit={handleSend} className="w-full max-w-2xl">
+          <div className="flex gap-2 bg-inkwell rounded-lg px-4 py-2 shadow-[rgba(4,4,7,0.25)_0px_2px_4px_0px,rgba(4,4,7,0.4)_0px_8px_24px_0px]">
+            <input
+              type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="Ask something about your documents..."
+              className="flex-1 bg-transparent text-bone placeholder:text-slate text-sm py-1.5 focus:outline-none"
+            />
+            <button
+              type="submit"
+              disabled={loading || !input.trim()}
+              className="border border-slate text-bone rounded px-4 py-1.5 text-sm disabled:opacity-40 hover:bg-bone/10 transition-colors"
+            >
+              Send
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   )
 }
