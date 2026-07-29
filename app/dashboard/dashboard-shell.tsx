@@ -67,7 +67,7 @@ export default function DashboardShell({
   }
 
   return (
-    <div className="flex h-screen bg-obsidian text-bone font-body overflow-hidden">
+    <div className="flex h-dvh bg-obsidian text-bone font-body overflow-hidden">
       {mobileSidebarOpen && (
         <div
           onClick={() => setMobileSidebarOpen(false)}
