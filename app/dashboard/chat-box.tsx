@@ -102,7 +102,7 @@ export default function ChatBox({
   return (
     <div className="flex flex-col h-full bg-carbon">
       {scopedDocumentNames && scopedDocumentNames.length > 0 && (
-        <div className="px-8 py-2 flex items-center gap-2 text-xs flex-wrap">
+        <div className="px-4 sm:px-8 py-2 flex items-center gap-2 text-xs flex-wrap">
           <span className="font-medium text-pewter shrink-0">Focused on:</span>
           {scopedDocumentNames.map((name, i) => (
             <span
@@ -116,7 +116,7 @@ export default function ChatBox({
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto px-8 py-10 space-y-6">
+      <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-10 space-y-6">
         {messages.length === 0 && !loading && (
           <div className="h-full flex flex-col items-center justify-center gap-2 text-center">
             <p className="font-display text-4xl text-bone tracking-wide">Ask something</p>
@@ -126,7 +126,7 @@ export default function ChatBox({
 
         {messages.map((m, i) => (
           <div key={i} className={(m.role === 'user' ? 'flex justify-end' : 'flex justify-start') + ' animate-message-in'}>
-            <div className="max-w-[70%]">
+            <div className="max-w-[85%] sm:max-w-[70%]">
               <div
                 className={
                   'px-4 py-3 text-[15px] leading-relaxed rounded-lg shadow-[rgba(4,4,7,0.25)_0px_2px_4px_0px,rgba(4,4,7,0.4)_0px_8px_24px_0px] ' +
@@ -174,9 +174,9 @@ export default function ChatBox({
         <div ref={bottomRef} />
       </div>
 
-      {error && <p className="px-8 text-red-400 text-sm">{error}</p>}
+      {error && <p className="px-4 sm:px-8 text-red-400 text-sm">{error}</p>}
 
-      <div className="p-6 flex justify-center">
+      <div className="p-4 sm:p-6 flex justify-center">
         <form onSubmit={handleSend} className="w-full max-w-2xl">
           <div className="flex gap-2 bg-inkwell rounded-lg px-4 py-2 shadow-[rgba(4,4,7,0.25)_0px_2px_4px_0px,rgba(4,4,7,0.4)_0px_8px_24px_0px]">
             <input

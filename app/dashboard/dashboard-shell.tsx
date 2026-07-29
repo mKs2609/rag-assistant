@@ -27,6 +27,7 @@ export default function DashboardShell({
   const [pickerOpen, setPickerOpen] = useState(false)
   const [pendingDocumentIds, setPendingDocumentIds] = useState<string[]>([])
   const [scopedDocumentIds, setScopedDocumentIds] = useState<string[] | null>(null)
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
   const supabase = createClient()
 
   const scopedDocumentNames = scopedDocumentIds
@@ -35,6 +36,7 @@ export default function DashboardShell({
 
   async function handleSelectConversation(id: string | null) {
     setActiveConversationId(id)
+    setMobileSidebarOpen(false)
 
     if (!id) {
       setScopedDocumentIds(null)
@@ -61,11 +63,26 @@ export default function DashboardShell({
     setScopedDocumentIds(pendingDocumentIds.length > 0 ? pendingDocumentIds : null)
     setPendingDocumentIds([])
     setPickerOpen(false)
+    setMobileSidebarOpen(false)
   }
 
   return (
-    <div className="flex h-screen bg-obsidian text-bone font-body">
-      <aside className="w-72 shrink-0 border-r border-ash bg-obsidian flex flex-col relative z-10">
+    <div className="flex h-screen bg-obsidian text-bone font-body overflow-hidden">
+      {mobileSidebarOpen && (
+        <div
+          onClick={() => setMobileSidebarOpen(false)}
+          className="fixed inset-0 bg-black/60 z-20 md:hidden"
+        />
+      )}
+
+      <aside
+        className={
+          'w-72 shrink-0 border-r border-ash bg-obsidian flex flex-col z-30 ' +
+          'fixed inset-y-0 left-0 transition-transform duration-200 ' +
+          'md:static md:translate-x-0 ' +
+          (mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full')
+        }
+      >
         <div className="p-4 border-b border-ash flex items-center justify-between">
           <h1 className="font-display text-lg text-bone">{workspaceName}</h1>
           <LogoutButton />
@@ -98,6 +115,7 @@ export default function DashboardShell({
             onClick={() => {
               setPendingDocumentIds([])
               setPickerOpen(true)
+              setMobileSidebarOpen(false)
             }}
             className="w-full text-sm border border-ash text-bone px-3 py-2 hover:bg-bone/10 transition-colors"
           >
@@ -118,7 +136,21 @@ export default function DashboardShell({
         </div>
       </aside>
 
-      <main className="flex-1 flex flex-col overflow-hidden relative bg-carbon">
+      <main className="flex-1 flex flex-col overflow-hidden relative bg-carbon min-w-0">
+        <button
+          onClick={() => setMobileSidebarOpen(true)}
+          className="md:hidden absolute top-4 left-4 z-10 text-bone p-2 bg-obsidian/60 backdrop-blur-sm rounded-lg"
+          aria-label="Open menu"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <line x1="3" y1="6" x2="21" y2="6" strokeLinecap="round" />
+            <line x1="3" y1="12" x2="21" y2="12" strokeLinecap="round" />
+            <line x1="3" y1="18" x2="21" y2="18" strokeLinecap="round" />
+            
+          </svg>
+        </button>
+        <div className="h-14 shrink-0 md:hidden" />
+
         {pickerOpen && (
           <DocumentPicker
             documents={documents}
@@ -129,7 +161,7 @@ export default function DashboardShell({
           />
         )}
 
-        <div className="relative z-10 flex-1 flex flex-col overflow-hidden">
+        <div className="relative z-0 flex-1 flex flex-col overflow-hidden">
           <ChatBox
             activeConversationId={activeConversationId}
             onConversationChange={setActiveConversationId}

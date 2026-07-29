@@ -56,8 +56,8 @@ export default function SignupPage() {
         />
       </div>
 
-      <div className="hidden lg:block absolute left-16 top-1/2 -translate-y-1/2 max-w-sm z-10 pointer-events-none animate-hero-in">
-        <p className="font-display font-light text-5xl leading-[0.95] text-[#fffdf9]">
+      <div className="absolute top-12 left-1/2 -translate-x-1/2 w-full px-6 text-center z-10 pointer-events-none animate-hero-in lg:top-1/2 lg:-translate-y-1/2 lg:left-16 lg:translate-x-0 lg:w-auto lg:max-w-sm lg:text-left">
+        <p className="font-display font-light text-3xl sm:text-4xl lg:text-5xl leading-[0.95] text-[#fffdf9]">
           Ask <span className="italic text-[#847dff]">anything</span>
           <br />about your documents
         </p>

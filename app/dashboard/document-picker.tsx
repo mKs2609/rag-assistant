@@ -22,8 +22,8 @@ export default function DocumentPicker({
   const readyDocs = documents.filter((d) => d.status === 'ready')
 
   return (
-    <div className="absolute inset-0 bg-carbon/95 backdrop-blur-sm z-20 flex items-center justify-center p-8">
-      <div className="max-w-md w-full space-y-5 bg-inkwell rounded-xl p-8 shadow-[rgba(4,4,7,0.25)_0px_2px_4px_0px,rgba(4,4,7,0.4)_0px_8px_24px_0px]">
+    <div className="absolute inset-0 bg-carbon/95 backdrop-blur-sm z-20 flex items-center justify-center p-4 sm:p-8">
+      <div className="max-w-md w-full space-y-5 bg-inkwell rounded-xl p-6 sm:p-8 shadow-[rgba(4,4,7,0.25)_0px_2px_4px_0px,rgba(4,4,7,0.4)_0px_8px_24px_0px]"> 
         <h2 className="font-display text-2xl text-bone text-center">Start a new chat</h2>
         <p className="text-sm text-pewter text-center">
           Pick specific documents to focus this chat on, or leave none selected to search everything.
