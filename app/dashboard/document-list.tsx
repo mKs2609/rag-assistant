@@ -51,7 +51,7 @@ export default function DocumentList({ documents }: { documents: Document[] }) {
               <button
                 onClick={() => handleDelete(doc.id)}
                 disabled={deletingId === doc.id}
-                className="opacity-0 group-hover:opacity-100 text-red-400 hover:underline disabled:opacity-40 shrink-0 transition-opacity"
+                className="text-red-400 hover:underline disabled:opacity-40 shrink-0"
               >
                 {deletingId === doc.id ? '…' : 'Delete'}
               </button>

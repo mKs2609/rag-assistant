@@ -1,7 +1,9 @@
 'use client'
 
 import { useEffect, useState, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import AttachMenu from './attach-menu'
 
 interface Source {
   filename: string
@@ -15,22 +17,34 @@ interface Message {
   sources?: Source[]
 }
 
+interface Document {
+  id: string
+  filename: string
+  status: string
+}
+
 export default function ChatBox({
   activeConversationId,
   onConversationChange,
   scopedDocumentIds,
   scopedDocumentNames,
+  documents,
+  onAttachDocument,
 }: {
   activeConversationId: string | null
   onConversationChange: (id: string) => void
   scopedDocumentIds: string[] | null
   scopedDocumentNames: string[] | null
+  documents: Document[]
+  onAttachDocument: (id: string) => Promise<void>
 }) {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [attaching, setAttaching] = useState(false)
   const supabase = createClient()
+  const router = useRouter()
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -97,6 +111,36 @@ export default function ChatBox({
     } finally {
       setLoading(false)
     }
+  }
+
+  async function handleUploadNew(file: File) {
+    setAttaching(true)
+    setError('')
+
+    const formData = new FormData()
+    formData.append('file', file)
+
+    const res = await fetch('/api/documents', { method: 'POST', body: formData })
+
+    if (!res.ok) {
+      const data = await res.json()
+      setError(data.error ?? 'Upload failed')
+      setAttaching(false)
+      return
+    }
+
+    const data = await res.json()
+    if (data.documentId) {
+      await onAttachDocument(data.documentId)
+    }
+    router.refresh()
+    setAttaching(false)
+  }
+
+  async function handleAttachExisting(docId: string) {
+    setAttaching(true)
+    await onAttachDocument(docId)
+    setAttaching(false)
   }
 
   return (
@@ -175,10 +219,18 @@ export default function ChatBox({
       </div>
 
       {error && <p className="px-4 sm:px-8 text-red-400 text-sm">{error}</p>}
+      {attaching && <p className="px-4 sm:px-8 text-pewter text-sm">Attaching document…</p>}
 
       <div className="p-4 sm:p-6 flex justify-center">
         <form onSubmit={handleSend} className="w-full max-w-2xl">
-          <div className="flex gap-2 bg-inkwell rounded-lg px-4 py-2 shadow-[rgba(4,4,7,0.25)_0px_2px_4px_0px,rgba(4,4,7,0.4)_0px_8px_24px_0px]">
+          <div className="flex gap-2 items-center bg-inkwell rounded-lg px-4 py-2 shadow-[rgba(4,4,7,0.25)_0px_2px_4px_0px,rgba(4,4,7,0.4)_0px_8px_24px_0px]">
+            <AttachMenu
+              documents={documents}
+              currentlyScopedIds={scopedDocumentIds ?? []}
+              onUploadNew={handleUploadNew}
+              onAttachExisting={handleAttachExisting}
+              disabled={attaching}
+            />
             <input
               type="text"
               value={input}
@@ -189,7 +241,7 @@ export default function ChatBox({
             <button
               type="submit"
               disabled={loading || !input.trim()}
-              className="border border-slate text-bone rounded px-4 py-1.5 text-sm disabled:opacity-40 hover:bg-bone/10 transition-colors"
+              className="border border-slate text-bone rounded px-4 py-1.5 text-sm disabled:opacity-40 hover:bg-bone/10 transition-colors shrink-0"
             >
               Send
             </button>

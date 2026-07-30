@@ -60,5 +60,5 @@ export async function POST(request: Request) {
   // upload request wait for chunking and embedding to finish.
   await processDocument(document.id)
 
-  return NextResponse.json({ success: true })
+  return NextResponse.json({ success: true, documentId: document.id })
 }

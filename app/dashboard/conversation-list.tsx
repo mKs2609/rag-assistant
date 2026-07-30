@@ -1,12 +1,13 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 
 interface Conversation {
   id: string
   title: string | null
   created_at: string
+  pinned: boolean
 }
 
 export default function ConversationList({
@@ -21,6 +22,7 @@ export default function ConversationList({
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editValue, setEditValue] = useState('')
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null)
   const supabase = createClient()
 
   useEffect(() => {
@@ -29,7 +31,8 @@ export default function ConversationList({
     async function loadConversations() {
       const { data } = await supabase
         .from('conversations')
-        .select('id, title, created_at')
+        .select('id, title, created_at, pinned')
+        .order('pinned', { ascending: false })
         .order('created_at', { ascending: false })
         .limit(20)
 
@@ -45,8 +48,19 @@ export default function ConversationList({
     }
   }, [activeConversationId])
 
-  async function handleDelete(e: React.MouseEvent, id: string) {
-    e.stopPropagation()
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      const target = e.target as HTMLElement
+      if (!target.closest('[data-conv-menu]')) {
+        setOpenMenuId(null)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  async function handleDelete(id: string) {
+    setOpenMenuId(null)
     setDeletingId(id)
 
     const res = await fetch(`/api/conversations/${id}`, { method: 'DELETE' })
@@ -60,8 +74,8 @@ export default function ConversationList({
     }
   }
 
-  function startEditing(e: React.MouseEvent, c: Conversation) {
-    e.stopPropagation()
+  function startEditing(c: Conversation) {
+    setOpenMenuId(null)
     setEditingId(c.id)
     setEditValue(c.title || '')
   }
@@ -85,61 +99,122 @@ export default function ConversationList({
     }
   }
 
-  return (
-    <div className="space-y-1">
-      <p className="text-xs font-bold text-bone uppercase tracking-wider">Conversations</p>
+  async function togglePin(c: Conversation) {
+    setOpenMenuId(null)
 
-      {loading && <p className="text-xs text-bone/50 px-1">Loading…</p>}
-      {!loading && conversations.length === 0 && (
-        <p className="text-xs text-bone/50 px-1">No conversations yet.</p>
-      )}
+    const res = await fetch(`/api/conversations/${c.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pinned: !c.pinned }),
+    })
 
-      {!loading && conversations.length > 0 && (
-        <ul className="space-y-0.5">
-          {conversations.map((c) => (
-            <li
-              key={c.id}
-              onClick={() => editingId !== c.id && onSelect(c.id)}
-              className={
-                'group flex items-center gap-1 text-sm px-3 py-2 cursor-pointer transition-all duration-150 ' +
-                (c.id === activeConversationId
-                  ? 'bg-bone/10 text-bone font-medium'
-                  : 'text-bone/50 hover:bg-bone/10 hover:text-bone')
-              }
+    if (res.ok) {
+      setConversations((prev) => {
+        const updated = prev.map((item) =>
+          item.id === c.id ? { ...item, pinned: !c.pinned } : item
+        )
+        return [...updated].sort((a, b) => {
+          if (a.pinned !== b.pinned) return a.pinned ? -1 : 1
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        })
+      })
+    }
+  }
+
+  if (loading) return <p className="text-xs text-bone/50 px-1">Loading…</p>
+  if (conversations.length === 0) return <p className="text-xs text-bone/50 px-1">No conversations yet.</p>
+
+  const pinned = conversations.filter((c) => c.pinned)
+  const unpinned = conversations.filter((c) => !c.pinned)
+
+  function renderRow(c: Conversation) {
+    return (
+      <li
+        key={c.id}
+        data-conv-menu
+        onClick={() => editingId !== c.id && onSelect(c.id)}
+        className={
+          'relative flex items-center gap-1 text-sm px-3 py-2 cursor-pointer transition-all duration-150 ' +
+          (c.id === activeConversationId
+            ? 'bg-bone/10 text-bone font-medium'
+            : 'text-bone/50 hover:bg-bone/10 hover:text-bone')
+        }
+      >
+        {editingId === c.id ? (
+          <input
+            autoFocus
+            value={editValue}
+            onChange={(e) => setEditValue(e.target.value)}
+            onClick={(e) => e.stopPropagation()}
+            onBlur={() => handleRename(c.id)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleRename(c.id)
+              if (e.key === 'Escape') setEditingId(null)
+            }}
+            className="flex-1 bg-obsidian border border-ash px-1 text-bone outline-none"
+          />
+        ) : (
+          <span className="flex-1 truncate flex items-center gap-1.5">
+            {c.pinned && <span className="text-xs">📌</span>}
+            {c.title || 'Untitled conversation'}
+          </span>
+        )}
+
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            setOpenMenuId(openMenuId === c.id ? null : c.id)
+          }}
+          className="shrink-0 text-bone/50 hover:text-bone px-1"
+          aria-label="Conversation options"
+        >
+          ⋯
+        </button>
+
+        {openMenuId === c.id && (
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="absolute right-0 top-full mt-1 z-30 w-36 bg-inkwell border border-ash rounded-lg shadow-[rgba(4,4,7,0.25)_0px_2px_4px_0px,rgba(4,4,7,0.4)_0px_8px_24px_0px] py-1"
+          >
+            <button
+              onClick={() => startEditing(c)}
+              className="w-full text-left px-3 py-2 text-sm text-bone hover:bg-bone/10"
             >
-              {editingId === c.id ? (
-                <input
-                  autoFocus
-                  value={editValue}
-                  onChange={(e) => setEditValue(e.target.value)}
-                  onClick={(e) => e.stopPropagation()}
-                  onBlur={() => handleRename(c.id)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleRename(c.id)
-                    if (e.key === 'Escape') setEditingId(null)
-                  }}
-                  className="flex-1 bg-obsidian border border-ash px-1 text-bone outline-none"
-                />
-              ) : (
-                <span className="flex-1 truncate">{c.title || 'Untitled conversation'}</span>
-              )}
+              Rename
+            </button>
+            <button
+              onClick={() => togglePin(c)}
+              className="w-full text-left px-3 py-2 text-sm text-bone hover:bg-bone/10"
+            >
+              {c.pinned ? 'Unpin' : 'Pin'}
+            </button>
+            <button
+              onClick={() => handleDelete(c.id)}
+              disabled={deletingId === c.id}
+              className="w-full text-left px-3 py-2 text-sm text-red-400 hover:bg-bone/10 disabled:opacity-40"
+            >
+              {deletingId === c.id ? 'Deleting…' : 'Delete'}
+            </button>
+          </div>
+        )}
+      </li>
+    )
+  }
 
-              <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                <button onClick={(e) => startEditing(e, c)} className="text-bone/50 hover:text-bone text-xs">
-                  Rename
-                </button>
-                <button
-                  onClick={(e) => handleDelete(e, c.id)}
-                  disabled={deletingId === c.id}
-                  className="text-red-400 hover:underline text-xs disabled:opacity-40"
-                >
-                  {deletingId === c.id ? '…' : 'Delete'}
-                </button>
-              </div>
-            </li>
-          ))}
-        </ul>
+  return (
+    <div className="space-y-3">
+      {pinned.length > 0 && (
+        <div>
+          <p className="text-xs font-bold text-bone uppercase tracking-wider px-1 mb-1">Pinned</p>
+          <ul className="space-y-0.5">{pinned.map(renderRow)}</ul>
+        </div>
       )}
+      <div>
+        {pinned.length > 0 && (
+          <p className="text-xs font-bold text-bone uppercase tracking-wider px-1 mb-1">Recent</p>
+        )}
+        <ul className="space-y-0.5">{unpinned.map(renderRow)}</ul>
+      </div>
     </div>
   )
 }

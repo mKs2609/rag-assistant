@@ -66,6 +66,29 @@ export default function DashboardShell({
     setMobileSidebarOpen(false)
   }
 
+  // Called from the "+" attach menu inside the chat itself. For a brand new
+  // conversation that hasn't been created yet, this just updates local state
+  // (sent along on the first message). For an existing one already saved in
+  // the database, it's persisted immediately via PATCH.
+  async function handleAttachDocument(docId: string) {
+    if (activeConversationId) {
+      const res = await fetch(`/api/conversations/${activeConversationId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ addDocumentIds: [docId] }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setScopedDocumentIds(data.documentIds ?? null)
+      }
+    } else {
+      setScopedDocumentIds((prev) => {
+        const current = prev ?? []
+        return current.includes(docId) ? current : [...current, docId]
+      })
+    }
+  }
+
   return (
     <div className="flex h-dvh bg-obsidian text-bone font-body overflow-hidden">
       {mobileSidebarOpen && (
@@ -146,7 +169,6 @@ export default function DashboardShell({
             <line x1="3" y1="6" x2="21" y2="6" strokeLinecap="round" />
             <line x1="3" y1="12" x2="21" y2="12" strokeLinecap="round" />
             <line x1="3" y1="18" x2="21" y2="18" strokeLinecap="round" />
-            
           </svg>
         </button>
         <div className="h-14 shrink-0 md:hidden" />
@@ -167,6 +189,8 @@ export default function DashboardShell({
             onConversationChange={setActiveConversationId}
             scopedDocumentIds={scopedDocumentIds}
             scopedDocumentNames={scopedDocumentNames}
+            documents={documents}
+            onAttachDocument={handleAttachDocument}
           />
         </div>
       </main>
