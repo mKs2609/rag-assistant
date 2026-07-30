@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { createClient } from '@/lib/supabase/client'
 
 interface Conversation {
@@ -9,6 +10,9 @@ interface Conversation {
   created_at: string
   pinned: boolean
 }
+
+const MENU_WIDTH = 144
+const MENU_HEIGHT = 130
 
 export default function ConversationList({
   activeConversationId,
@@ -23,6 +27,8 @@ export default function ConversationList({
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editValue, setEditValue] = useState('')
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null)
+  const buttonRefs = useRef<Map<string, HTMLButtonElement>>(new Map())
   const supabase = createClient()
 
   useEffect(() => {
@@ -49,15 +55,45 @@ export default function ConversationList({
   }, [activeConversationId])
 
   useEffect(() => {
+    function closeMenu() {
+      setOpenMenuId(null)
+    }
     function handleClickOutside(e: MouseEvent) {
       const target = e.target as HTMLElement
       if (!target.closest('[data-conv-menu]')) {
-        setOpenMenuId(null)
+        closeMenu()
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
+    // capture: true catches scrolling inside nested containers too, since
+    // scroll events don't bubble normally — this stops a stale, misaligned
+    // menu from lingering if the list scrolls while it's open.
+    document.addEventListener('scroll', closeMenu, true)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      document.removeEventListener('scroll', closeMenu, true)
+    }
   }, [])
+
+  function handleToggleMenu(id: string) {
+    if (openMenuId === id) {
+      setOpenMenuId(null)
+      return
+    }
+
+    const btn = buttonRefs.current.get(id)
+    if (btn) {
+      const rect = btn.getBoundingClientRect()
+      const spaceBelow = window.innerHeight - rect.bottom
+      const openUp = spaceBelow < MENU_HEIGHT
+
+      setMenuPos({
+        top: openUp ? rect.top - MENU_HEIGHT - 4 : rect.bottom + 4,
+        left: Math.min(rect.right - MENU_WIDTH, window.innerWidth - MENU_WIDTH - 8),
+      })
+    }
+    setOpenMenuId(id)
+  }
 
   async function handleDelete(id: string) {
     setOpenMenuId(null)
@@ -126,6 +162,7 @@ export default function ConversationList({
 
   const pinned = conversations.filter((c) => c.pinned)
   const unpinned = conversations.filter((c) => !c.pinned)
+  const openConvo = conversations.find((c) => c.id === openMenuId)
 
   function renderRow(c: Conversation) {
     return (
@@ -161,42 +198,18 @@ export default function ConversationList({
         )}
 
         <button
+          ref={(el) => {
+            if (el) buttonRefs.current.set(c.id, el)
+          }}
           onClick={(e) => {
             e.stopPropagation()
-            setOpenMenuId(openMenuId === c.id ? null : c.id)
+            handleToggleMenu(c.id)
           }}
           className="shrink-0 text-bone/50 hover:text-bone px-1"
           aria-label="Conversation options"
         >
           ⋯
         </button>
-
-        {openMenuId === c.id && (
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="absolute right-0 top-full mt-1 z-30 w-36 bg-inkwell border border-ash rounded-lg shadow-[rgba(4,4,7,0.25)_0px_2px_4px_0px,rgba(4,4,7,0.4)_0px_8px_24px_0px] py-1"
-          >
-            <button
-              onClick={() => startEditing(c)}
-              className="w-full text-left px-3 py-2 text-sm text-bone hover:bg-bone/10"
-            >
-              Rename
-            </button>
-            <button
-              onClick={() => togglePin(c)}
-              className="w-full text-left px-3 py-2 text-sm text-bone hover:bg-bone/10"
-            >
-              {c.pinned ? 'Unpin' : 'Pin'}
-            </button>
-            <button
-              onClick={() => handleDelete(c.id)}
-              disabled={deletingId === c.id}
-              className="w-full text-left px-3 py-2 text-sm text-red-400 hover:bg-bone/10 disabled:opacity-40"
-            >
-              {deletingId === c.id ? 'Deleting…' : 'Delete'}
-            </button>
-          </div>
-        )}
       </li>
     )
   }
@@ -215,6 +228,39 @@ export default function ConversationList({
         )}
         <ul className="space-y-0.5">{unpinned.map(renderRow)}</ul>
       </div>
+
+      {openConvo &&
+        menuPos &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div
+            data-conv-menu
+            onClick={(e) => e.stopPropagation()}
+            style={{ position: 'fixed', top: menuPos.top, left: menuPos.left, width: MENU_WIDTH }}
+            className="z-[100] bg-inkwell border border-ash rounded-lg shadow-[rgba(4,4,7,0.25)_0px_2px_4px_0px,rgba(4,4,7,0.4)_0px_8px_24px_0px] py-1"
+          >
+            <button
+              onClick={() => startEditing(openConvo)}
+              className="w-full text-left px-3 py-2 text-sm text-bone hover:bg-bone/10"
+            >
+              Rename
+            </button>
+            <button
+              onClick={() => togglePin(openConvo)}
+              className="w-full text-left px-3 py-2 text-sm text-bone hover:bg-bone/10"
+            >
+              {openConvo.pinned ? 'Unpin' : 'Pin'}
+            </button>
+            <button
+              onClick={() => handleDelete(openConvo.id)}
+              disabled={deletingId === openConvo.id}
+              className="w-full text-left px-3 py-2 text-sm text-red-400 hover:bg-bone/10 disabled:opacity-40"
+            >
+              {deletingId === openConvo.id ? 'Deleting…' : 'Delete'}
+            </button>
+          </div>,
+          document.body
+        )}
     </div>
   )
 }

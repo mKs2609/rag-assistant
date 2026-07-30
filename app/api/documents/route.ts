@@ -19,6 +19,23 @@ export async function POST(request: Request) {
   if (!profile) {
     return NextResponse.json({ error: 'Profile not found' }, { status: 404 })
   }
+  // Rate limit: same pattern as chat, applied to uploads — checked before
+  // any storage or embedding work runs, so a blocked request costs nothing.
+  const UPLOAD_RATE_LIMIT_MAX = 10
+  const UPLOAD_RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000
+
+  const { count: recentUploads } = await supabase
+    .from('documents')
+    .select('id', { count: 'exact', head: true })
+    .eq('uploaded_by', user.id)
+    .gte('created_at', new Date(Date.now() - UPLOAD_RATE_LIMIT_WINDOW_MS).toISOString())
+
+  if ((recentUploads ?? 0) >= UPLOAD_RATE_LIMIT_MAX) {
+    return NextResponse.json(
+      { error: `Rate limit exceeded. You can upload up to ${UPLOAD_RATE_LIMIT_MAX} documents every 10 minutes.` },
+      { status: 429 }
+    )
+  }
 
   const formData = await request.formData()
   const file = formData.get('file') as File | null

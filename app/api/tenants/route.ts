@@ -2,6 +2,35 @@ import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 export async function POST(request: Request) {
+  // No authenticated user exists yet at signup time, so this keys off IP
+  // address instead, using the admin client since there's no session to
+  // scope an ordinary query to.
+  const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown'
+  const SIGNUP_RATE_LIMIT_MAX = 5
+  const SIGNUP_RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000
+
+  const rateLimitAdmin = createAdminClient()
+  const { count: recentSignups } = await rateLimitAdmin
+    .from('audit_logs')
+    .select('id', { count: 'exact', head: true })
+    .eq('action', 'signup_attempt')
+    .eq('metadata->>ip', ip)
+    .gte('created_at', new Date(Date.now() - SIGNUP_RATE_LIMIT_WINDOW_MS).toISOString())
+
+  if ((recentSignups ?? 0) >= SIGNUP_RATE_LIMIT_MAX) {
+    return NextResponse.json(
+      { error: 'Too many signup attempts. Please try again later.' },
+      { status: 429 }
+    )
+  }
+
+  await rateLimitAdmin.from('audit_logs').insert({
+    tenant_id: null,
+    user_id: null,
+    action: 'signup_attempt',
+    metadata: { ip },
+  })
+
   const { email, password, tenantName } = await request.json()
 
   if (!email || !password || !tenantName) {
