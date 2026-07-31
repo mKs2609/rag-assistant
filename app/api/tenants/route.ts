@@ -2,19 +2,19 @@ import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 export async function POST(request: Request) {
-  // No authenticated user exists yet at signup time, so this keys off IP
-  // address instead, using the admin client since there's no session to
-  // scope an ordinary query to.
+  // No authenticated user or tenant exists yet at signup time, so this
+  // keys off IP address using its own small table — decoupled from
+  // audit_logs, which requires a real tenant_id, something an attempted
+  // signup genuinely doesn't have yet.
   const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown'
   const SIGNUP_RATE_LIMIT_MAX = 5
   const SIGNUP_RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000
 
   const rateLimitAdmin = createAdminClient()
   const { count: recentSignups } = await rateLimitAdmin
-    .from('audit_logs')
+    .from('signup_rate_limits')
     .select('id', { count: 'exact', head: true })
-    .eq('action', 'signup_attempt')
-    .eq('metadata->>ip', ip)
+    .eq('ip', ip)
     .gte('created_at', new Date(Date.now() - SIGNUP_RATE_LIMIT_WINDOW_MS).toISOString())
 
   if ((recentSignups ?? 0) >= SIGNUP_RATE_LIMIT_MAX) {
@@ -24,12 +24,16 @@ export async function POST(request: Request) {
     )
   }
 
-  await rateLimitAdmin.from('audit_logs').insert({
-    tenant_id: null,
-    user_id: null,
-    action: 'signup_attempt',
-    metadata: { ip },
-  })
+  const { error: rateLimitLogError } = await rateLimitAdmin
+    .from('signup_rate_limits')
+    .insert({ ip })
+
+  if (rateLimitLogError) {
+    // Don't fail a real signup just because the rate-limit counter itself
+    // couldn't be recorded — but this time, log it instead of letting it
+    // vanish silently like it did before.
+    console.error('Failed to record signup rate-limit entry:', rateLimitLogError.message)
+  }
 
   const { email, password, tenantName } = await request.json()
 
