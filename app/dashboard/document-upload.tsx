@@ -16,20 +16,34 @@ export default function DocumentUpload() {
     setUploading(true)
     setError('')
 
-    const formData = new FormData()
-    formData.append('file', file)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
 
-    const res = await fetch('/api/documents', { method: 'POST', body: formData })
-    setUploading(false)
+      const res = await fetch('/api/documents', { method: 'POST', body: formData })
 
-    if (!res.ok) {
-      const data = await res.json()
-      setError(data.error ?? 'Upload failed')
-      return
+      if (!res.ok) {
+        let message = 'Upload failed'
+        try {
+          const data = await res.json()
+          message = data.error ?? message
+        } catch {
+          // Response wasn't valid JSON at all — likely the connection was
+          // cut short (e.g. a hosting body-size limit), not something our
+          // own code returned.
+          message = 'Upload failed — the file may be too large for the server to accept.'
+        }
+        setError(message)
+        return
+      }
+
+      setFile(null)
+      router.refresh()
+    } catch (err) {
+      setError('Network error during upload. Please try again.')
+    } finally {
+      setUploading(false)
     }
-
-    setFile(null)
-    router.refresh()
   }
 
   return (

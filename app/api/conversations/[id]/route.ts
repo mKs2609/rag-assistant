@@ -37,9 +37,9 @@ export async function PATCH(
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
   }
 
-  const { title, pinned, addDocumentIds } = await request.json()
+  const { title, pinned, addDocumentIds, removeDocumentIds } = await request.json()
 
-  const updates: { title?: string; pinned?: boolean; document_ids?: string[] } = {}
+  const updates: { title?: string; pinned?: boolean; document_ids?: string[] | null } = {}
 
   if (title !== undefined) {
     if (typeof title !== 'string' || !title.trim()) {
@@ -55,9 +55,12 @@ export async function PATCH(
     updates.pinned = pinned
   }
 
-  if (addDocumentIds !== undefined) {
-    if (!Array.isArray(addDocumentIds) || addDocumentIds.some((d) => typeof d !== 'string')) {
+  if (addDocumentIds !== undefined || removeDocumentIds !== undefined) {
+    if (addDocumentIds !== undefined && (!Array.isArray(addDocumentIds) || addDocumentIds.some((d: unknown) => typeof d !== 'string'))) {
       return NextResponse.json({ error: 'addDocumentIds must be an array of strings' }, { status: 400 })
+    }
+    if (removeDocumentIds !== undefined && (!Array.isArray(removeDocumentIds) || removeDocumentIds.some((d: unknown) => typeof d !== 'string'))) {
+      return NextResponse.json({ error: 'removeDocumentIds must be an array of strings' }, { status: 400 })
     }
 
     const { data: existing } = await supabase
@@ -66,9 +69,18 @@ export async function PATCH(
       .eq('id', id)
       .single()
 
-    const current: string[] = existing?.document_ids ?? []
-    const merged = Array.from(new Set([...current, ...addDocumentIds]))
-    updates.document_ids = merged
+    let current: string[] = existing?.document_ids ?? []
+
+    if (addDocumentIds) {
+      current = Array.from(new Set([...current, ...addDocumentIds]))
+    }
+    if (removeDocumentIds) {
+      current = current.filter((docId) => !removeDocumentIds.includes(docId))
+    }
+
+    // Empty array here would mean "search zero documents" downstream —
+    // null is what actually means unscoped, so convert back explicitly.
+    updates.document_ids = current.length > 0 ? current : null
   }
 
   if (Object.keys(updates).length === 0) {

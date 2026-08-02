@@ -23,20 +23,27 @@ interface Document {
   status: string
 }
 
+interface ScopedDocument {
+  id: string
+  filename: string
+}
+
 export default function ChatBox({
   activeConversationId,
   onConversationChange,
   scopedDocumentIds,
-  scopedDocumentNames,
+  scopedDocuments,
   documents,
   onAttachDocument,
+  onRemoveDocument,
 }: {
   activeConversationId: string | null
   onConversationChange: (id: string) => void
   scopedDocumentIds: string[] | null
-  scopedDocumentNames: string[] | null
+  scopedDocuments: ScopedDocument[] | null
   documents: Document[]
   onAttachDocument: (id: string) => Promise<void>
+  onRemoveDocument: (id: string) => Promise<void>
 }) {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
@@ -145,16 +152,23 @@ export default function ChatBox({
 
   return (
     <div className="flex flex-col h-full bg-carbon">
-      {scopedDocumentNames && scopedDocumentNames.length > 0 && (
+      {scopedDocuments && scopedDocuments.length > 0 && (
         <div className="px-4 sm:px-8 py-2 flex items-center gap-2 text-xs flex-wrap">
           <span className="font-medium text-pewter shrink-0">Focused on:</span>
-          {scopedDocumentNames.map((name, i) => (
+          {scopedDocuments.map((doc) => (
             <span
-              key={i}
-              className="rounded px-2 py-0.5 text-slate bg-inkwell truncate max-w-[180px]"
-              title={name}
+              key={doc.id}
+              className="rounded px-2 py-0.5 bg-inkwell border border-slate text-bone truncate max-w-[200px] flex items-center gap-1.5"
             >
-              {name}
+              <span className="truncate">{doc.filename}</span>
+              <button
+                type="button"
+                onClick={() => onRemoveDocument(doc.id)}
+                className="text-pewter hover:text-red-400 shrink-0 leading-none"
+                aria-label={`Remove ${doc.filename} from this chat`}
+              >
+                ×
+              </button>
             </span>
           ))}
         </div>

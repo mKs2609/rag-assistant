@@ -30,8 +30,10 @@ export default function DashboardShell({
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
   const supabase = createClient()
 
-  const scopedDocumentNames = scopedDocumentIds
-    ? documents.filter((d) => scopedDocumentIds.includes(d.id)).map((d) => d.filename)
+  const scopedDocuments = scopedDocumentIds
+    ? documents
+        .filter((d) => scopedDocumentIds.includes(d.id))
+        .map((d) => ({ id: d.id, filename: d.filename }))
     : null
 
   async function handleSelectConversation(id: string | null) {
@@ -66,10 +68,6 @@ export default function DashboardShell({
     setMobileSidebarOpen(false)
   }
 
-  // Called from the "+" attach menu inside the chat itself. For a brand new
-  // conversation that hasn't been created yet, this just updates local state
-  // (sent along on the first message). For an existing one already saved in
-  // the database, it's persisted immediately via PATCH.
   async function handleAttachDocument(docId: string) {
     if (activeConversationId) {
       const res = await fetch(`/api/conversations/${activeConversationId}`, {
@@ -85,6 +83,26 @@ export default function DashboardShell({
       setScopedDocumentIds((prev) => {
         const current = prev ?? []
         return current.includes(docId) ? current : [...current, docId]
+      })
+    }
+  }
+
+  async function handleRemoveDocument(docId: string) {
+    if (activeConversationId) {
+      const res = await fetch(`/api/conversations/${activeConversationId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ removeDocumentIds: [docId] }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setScopedDocumentIds(data.documentIds ?? null)
+      }
+    } else {
+      setScopedDocumentIds((prev) => {
+        if (!prev) return prev
+        const filtered = prev.filter((id) => id !== docId)
+        return filtered.length > 0 ? filtered : null
       })
     }
   }
@@ -188,9 +206,10 @@ export default function DashboardShell({
             activeConversationId={activeConversationId}
             onConversationChange={setActiveConversationId}
             scopedDocumentIds={scopedDocumentIds}
-            scopedDocumentNames={scopedDocumentNames}
+            scopedDocuments={scopedDocuments}
             documents={documents}
             onAttachDocument={handleAttachDocument}
+            onRemoveDocument={handleRemoveDocument}
           />
         </div>
       </main>
