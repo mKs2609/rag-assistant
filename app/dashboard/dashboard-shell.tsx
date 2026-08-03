@@ -19,9 +19,11 @@ interface Document {
 export default function DashboardShell({
   workspaceName,
   documents,
+  tenantId,
 }: {
   workspaceName: string
   documents: Document[]
+  tenantId: string
 }) {
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null)
   const [pickerOpen, setPickerOpen] = useState(false)
@@ -172,7 +174,7 @@ export default function DashboardShell({
         </div>
 
         <div className="p-4 border-t border-ash space-y-3">
-          <DocumentUpload />
+          <DocumentUpload tenantId={tenantId} />
           <DocumentList documents={documents} />
         </div>
       </aside>
@@ -208,6 +210,7 @@ export default function DashboardShell({
             scopedDocumentIds={scopedDocumentIds}
             scopedDocuments={scopedDocuments}
             documents={documents}
+            tenantId={tenantId}
             onAttachDocument={handleAttachDocument}
             onRemoveDocument={handleRemoveDocument}
           />

@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { uploadDocumentDirect } from '@/lib/documents/upload-client'
 import AttachMenu from './attach-menu'
 
 interface Source {
@@ -34,6 +35,7 @@ export default function ChatBox({
   scopedDocumentIds,
   scopedDocuments,
   documents,
+  tenantId,
   onAttachDocument,
   onRemoveDocument,
 }: {
@@ -42,6 +44,7 @@ export default function ChatBox({
   scopedDocumentIds: string[] | null
   scopedDocuments: ScopedDocument[] | null
   documents: Document[]
+  tenantId: string
   onAttachDocument: (id: string) => Promise<void>
   onRemoveDocument: (id: string) => Promise<void>
 }) {
@@ -124,24 +127,15 @@ export default function ChatBox({
     setAttaching(true)
     setError('')
 
-    const formData = new FormData()
-    formData.append('file', file)
-
-    const res = await fetch('/api/documents', { method: 'POST', body: formData })
-
-    if (!res.ok) {
-      const data = await res.json()
-      setError(data.error ?? 'Upload failed')
+    try {
+      const { documentId } = await uploadDocumentDirect(file, tenantId)
+      await onAttachDocument(documentId)
+      router.refresh()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Upload failed')
+    } finally {
       setAttaching(false)
-      return
     }
-
-    const data = await res.json()
-    if (data.documentId) {
-      await onAttachDocument(data.documentId)
-    }
-    router.refresh()
-    setAttaching(false)
   }
 
   async function handleAttachExisting(docId: string) {

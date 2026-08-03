@@ -2,8 +2,9 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { uploadDocumentDirect } from '@/lib/documents/upload-client'
 
-export default function DocumentUpload() {
+export default function DocumentUpload({ tenantId }: { tenantId: string }) {
   const [file, setFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState('')
@@ -17,30 +18,11 @@ export default function DocumentUpload() {
     setError('')
 
     try {
-      const formData = new FormData()
-      formData.append('file', file)
-
-      const res = await fetch('/api/documents', { method: 'POST', body: formData })
-
-      if (!res.ok) {
-        let message = 'Upload failed'
-        try {
-          const data = await res.json()
-          message = data.error ?? message
-        } catch {
-          // Response wasn't valid JSON at all — likely the connection was
-          // cut short (e.g. a hosting body-size limit), not something our
-          // own code returned.
-          message = 'Upload failed — the file may be too large for the server to accept.'
-        }
-        setError(message)
-        return
-      }
-
+      await uploadDocumentDirect(file, tenantId)
       setFile(null)
       router.refresh()
     } catch (err) {
-      setError('Network error during upload. Please try again.')
+      setError(err instanceof Error ? err.message : 'Upload failed')
     } finally {
       setUploading(false)
     }

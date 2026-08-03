@@ -25,6 +25,7 @@ export default async function DashboardPage() {
     <DashboardShell
       workspaceName={(profile?.tenants as any)?.name ?? 'Your workspace'}
       documents={documents ?? []}
+      tenantId={profile?.tenant_id ?? ''}
     />
   )
 }
