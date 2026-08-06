@@ -4,6 +4,8 @@ import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { uploadDocumentDirect } from '@/lib/documents/upload-client'
+import { useSpeechRecognition } from '@/lib/hooks/useSpeechRecognition'
+import { useSpeechSynthesis } from '@/lib/hooks/useSpeechSynthesis'
 import AttachMenu from './attach-menu'
 
 interface Source {
@@ -57,6 +59,10 @@ export default function ChatBox({
   const router = useRouter()
   const bottomRef = useRef<HTMLDivElement>(null)
 
+  const { isListening, transcript, isSupported: micSupported, startListening, stopListening } =
+    useSpeechRecognition()
+  const { speak, stop: stopSpeaking, speakingId, isSupported: speechSupported } = useSpeechSynthesis()
+
   useEffect(() => {
     let cancelled = false
 
@@ -86,9 +92,30 @@ export default function ChatBox({
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, loading])
 
+  // While actively listening, mirror the live transcript into the input
+  // box. Once listening stops, this stops updating, and the last
+  // transcribed text just sits there ready to edit or send.
+  useEffect(() => {
+    if (isListening) {
+      setInput(transcript)
+    }
+  }, [transcript, isListening])
+
+  function toggleMic() {
+    if (isListening) {
+      stopListening()
+    } else {
+      startListening()
+    }
+  }
+
   async function handleSend(e: React.FormEvent) {
     e.preventDefault()
     if (!input.trim() || loading) return
+
+    if (isListening) {
+      stopListening()
+    }
 
     const userMessage = input
     setInput('')
@@ -176,43 +203,67 @@ export default function ChatBox({
           </div>
         )}
 
-        {messages.map((m, i) => (
-          <div key={i} className={(m.role === 'user' ? 'flex justify-end' : 'flex justify-start') + ' animate-message-in'}>
-            <div className="max-w-[85%] sm:max-w-[70%]">
-              <div
-                className={
-                  'px-4 py-3 text-[15px] leading-relaxed rounded-lg shadow-[rgba(4,4,7,0.25)_0px_2px_4px_0px,rgba(4,4,7,0.4)_0px_8px_24px_0px] ' +
-                  (m.role === 'user'
-                    ? 'bg-graphite-card text-bone'
-                    : 'bg-inkwell text-bone')
-                }
-              >
-                {m.content}
-              </div>
-              {m.sources && m.sources.length > 0 && (
-                <div className="mt-2 space-y-1.5">
-                  {m.sources.map((s, j) => (
-                    <div key={j} className="rounded-lg px-3 py-2 text-xs bg-inkwell shadow-[rgba(0,0,0,0.12)_0px_12px_12px_0px]">
-                      <div className="flex items-center gap-1.5 text-pewter">
-                        <span className="font-mono text-[#c99a5b]">[{j + 1}]</span>
-                        <span className="text-bone">{s.filename}</span>
-                        {s.verified === true && (
-                          <span className="text-slate" title="This citation matches its source">✓ verified</span>
-                        )}
-                        {s.verified === false && (
-                          <span className="text-red-400" title="This citation's wording doesn't clearly match its source — worth double-checking">
-                            ⚠ unverified
-                          </span>
-                        )}
-                      </div>
-                      <p className="mt-0.5 text-pewter">&quot;{s.snippet}...&quot;</p>
-                    </div>
-                  ))}
+        {messages.map((m, i) => {
+          const messageId = i.toString()
+          const isSpeaking = speakingId === messageId
+
+          return (
+            <div key={i} className={(m.role === 'user' ? 'flex justify-end' : 'flex justify-start') + ' animate-message-in'}>
+              <div className="max-w-[85%] sm:max-w-[70%]">
+                <div
+                  className={
+                    'px-4 py-3 text-[15px] leading-relaxed rounded-lg shadow-[rgba(4,4,7,0.25)_0px_2px_4px_0px,rgba(4,4,7,0.4)_0px_8px_24px_0px] flex items-start gap-2 ' +
+                    (m.role === 'user'
+                      ? 'bg-graphite-card text-bone'
+                      : 'bg-inkwell text-bone')
+                  }
+                >
+                  <span className="flex-1">{m.content}</span>
+                  {m.role === 'assistant' && speechSupported && (
+                    <button
+                      type="button"
+                      onClick={() => (isSpeaking ? stopSpeaking() : speak(m.content, messageId))}
+                      className="text-pewter hover:text-bone shrink-0 mt-0.5"
+                      aria-label={isSpeaking ? 'Stop reading aloud' : 'Read this message aloud'}
+                    >
+                      {isSpeaking ? (
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                          <rect x="6" y="6" width="12" height="12" />
+                        </svg>
+                      ) : (
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M11 5 6 9H2v6h4l5 4V5z" strokeLinecap="round" strokeLinejoin="round" />
+                          <path d="M15.5 8.5a5 5 0 0 1 0 7" strokeLinecap="round" />
+                        </svg>
+                      )}
+                    </button>
+                  )}
                 </div>
-              )}
+                {m.sources && m.sources.length > 0 && (
+                  <div className="mt-2 space-y-1.5">
+                    {m.sources.map((s, j) => (
+                      <div key={j} className="rounded-lg px-3 py-2 text-xs bg-inkwell shadow-[rgba(0,0,0,0.12)_0px_12px_12px_0px]">
+                        <div className="flex items-center gap-1.5 text-pewter">
+                          <span className="font-mono text-[#c99a5b]">[{j + 1}]</span>
+                          <span className="text-bone">{s.filename}</span>
+                          {s.verified === true && (
+                            <span className="text-slate" title="This citation matches its source">✓ verified</span>
+                          )}
+                          {s.verified === false && (
+                            <span className="text-red-400" title="This citation's wording doesn't clearly match its source — worth double-checking">
+                              ⚠ unverified
+                            </span>
+                          )}
+                        </div>
+                        <p className="mt-0.5 text-pewter">&quot;{s.snippet}...&quot;</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          )
+        })}
 
         {loading && (
           <div className="flex justify-start animate-message-in">
@@ -243,9 +294,27 @@ export default function ChatBox({
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Ask something about your documents..."
+              placeholder={isListening ? 'Listening…' : 'Ask something about your documents...'}
               className="flex-1 bg-transparent text-bone placeholder:text-slate text-sm py-1.5 focus:outline-none"
             />
+            {micSupported && (
+              <button
+                type="button"
+                onClick={toggleMic}
+                className={
+                  'w-8 h-8 flex items-center justify-center rounded-full shrink-0 transition-colors ' +
+                  (isListening ? 'bg-red-500/20 text-red-400 animate-pulse' : 'text-bone hover:bg-bone/10')
+                }
+                aria-label={isListening ? 'Stop voice input' : 'Start voice input'}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="9" y="2" width="6" height="11" rx="3" />
+                  <path d="M5 10a7 7 0 0 0 14 0" strokeLinecap="round" />
+                  <line x1="12" y1="17" x2="12" y2="21" strokeLinecap="round" />
+                  <line x1="8" y1="21" x2="16" y2="21" strokeLinecap="round" />
+                </svg>
+              </button>
+            )}
             <button
               type="submit"
               disabled={loading || !input.trim()}
