@@ -39,10 +39,6 @@ function significantWords(text: string): Set<string> {
   )
 }
 
-// Free, no-API-call check: does the sentence making a claim actually share
-// enough meaningful words with the chunk it's citing? Doesn't prove the
-// claim is true, but catches a citation that clearly doesn't match its
-// source — the most common and most damaging failure mode.
 function isCitationGrounded(claimSentence: string, sourceContent: string): boolean {
   const claimWords = significantWords(claimSentence)
   if (claimWords.size === 0) return true
@@ -140,14 +136,9 @@ export async function POST(request: Request) {
   }
 
   let matches: { id: string; document_id: string; content: string; filename: string }[] = []
-  let retrievalFailed = false
   try {
     const queryEmbedding = await embedQuery(message)
 
-    // Run meaning-based (vector) and exact-word (keyword) search at the
-    // same time — they're good at different things, so combining them
-    // catches more than either alone (e.g. exact codes/IDs vs. paraphrased
-    // questions).
     const [vectorResult, keywordResult] = await Promise.all([
       supabase.rpc('match_document_chunks', {
         query_embedding: queryEmbedding,
@@ -164,9 +155,6 @@ export async function POST(request: Request) {
     ])
 
     if (vectorResult.error) throw new Error(vectorResult.error.message)
-    // Keyword search errors are logged but not fatal — plainto_tsquery can
-    // occasionally choke on unusual input, and vector search alone is
-    // still a perfectly good fallback.
     if (keywordResult.error) console.error('Keyword search failed:', keywordResult.error.message)
 
     const vectorMatches = vectorResult.data ?? []
@@ -183,7 +171,6 @@ export async function POST(request: Request) {
     matches = combined.slice(0, 6)
   } catch (err) {
     console.error('Retrieval failed:', err)
-    retrievalFailed = true
   }
 
   const context = matches.length
@@ -197,66 +184,116 @@ If the answer isn't in the reference material, say so clearly instead of guessin
 Reference material:
 ${context}`
 
-  let answer: string
-  try {
-    const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${process.env.GEMINI_API_KEY}`,
-      {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: systemPrompt }] },
-          contents: [{ role: 'user', parts: [{ text: message }] }],
-        }),
+  const finalConvoId = convoId
+  const encoder = new TextEncoder()
+
+  const stream = new ReadableStream({
+    async start(controller) {
+      function send(event: Record<string, unknown>) {
+        controller.enqueue(encoder.encode(JSON.stringify(event) + '\n'))
       }
-    )
 
-    if (!geminiRes.ok) {
-      const errText = await geminiRes.text()
-      return NextResponse.json({ error: `Gemini API error: ${errText}` }, { status: 500 })
-    }
+      let fullText = ''
 
-    const geminiData = await geminiRes.json()
-    answer = geminiData.candidates?.[0]?.content?.parts?.[0]?.text ?? 'No response generated.'
-  } catch (err) {
-    console.error('Gemini request failed:', err)
-    return NextResponse.json(
-      { error: 'Could not reach the AI service. Please try again in a moment.' },
-      { status: 502 }
-    )
-  }
+      try {
+        const geminiRes = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:streamGenerateContent?alt=sse&key=${process.env.GEMINI_API_KEY}`,
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              systemInstruction: { parts: [{ text: systemPrompt }] },
+              contents: [{ role: 'user', parts: [{ text: message }] }],
+            }),
+          }
+        )
 
-  // Check each citation the model actually used against its source chunk.
-  // true = checks out, false = doesn't check out, unset = never cited at all.
-  const verifiedFlags: Record<number, boolean> = {}
-  const sentences = answer.split(/(?<=[.!?])\s+/)
+        if (!geminiRes.ok || !geminiRes.body) {
+          const errText = await geminiRes.text()
+          send({ type: 'error', error: `Gemini API error: ${errText}` })
+          controller.close()
+          return
+        }
 
-  for (const sentence of sentences) {
-    const citationsInSentence = [...sentence.matchAll(/\[(\d+)\]/g)].map((m) => parseInt(m[1], 10))
-    for (const num of citationsInSentence) {
-      const match = matches[num - 1]
-      if (!match) continue
-      const grounded = isCitationGrounded(sentence, match.content)
-      verifiedFlags[num] = (verifiedFlags[num] ?? true) && grounded
-    }
-  }
+        const reader = geminiRes.body.getReader()
+        const decoder = new TextDecoder()
+        let buffer = ''
 
-  await supabase.from('messages').insert({
-    tenant_id: profile.tenant_id,
-    conversation_id: convoId,
-    role: 'assistant',
-    content: answer,
-    cited_chunk_ids: matches.map((m) => m.id),
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+
+          // SSE lines can arrive split across network chunks, so keep any
+          // incomplete trailing line in the buffer for the next read.
+          buffer += decoder.decode(value, { stream: true })
+          const lines = buffer.split('\n')
+          buffer = lines.pop() ?? ''
+
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue
+            const jsonStr = line.slice(6).trim()
+            if (!jsonStr) continue
+
+            try {
+              const parsed = JSON.parse(jsonStr)
+              const delta: string = parsed.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
+              if (delta) {
+                fullText += delta
+                send({ type: 'token', text: delta })
+              }
+            } catch {
+              // Incomplete chunk — the next read usually completes it.
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Gemini streaming request failed:', err)
+        send({ type: 'error', error: 'Could not reach the AI service. Please try again in a moment.' })
+        controller.close()
+        return
+      }
+
+      const answer = fullText || 'No response generated.'
+
+      const verifiedFlags: Record<number, boolean> = {}
+      const sentences = answer.split(/(?<=[.!?])\s+/)
+
+      for (const sentence of sentences) {
+        const citationsInSentence = [...sentence.matchAll(/\[(\d+)\]/g)].map((m) => parseInt(m[1], 10))
+        for (const num of citationsInSentence) {
+          const match = matches[num - 1]
+          if (!match) continue
+          const grounded = isCitationGrounded(sentence, match.content)
+          verifiedFlags[num] = (verifiedFlags[num] ?? true) && grounded
+        }
+      }
+
+      await supabase.from('messages').insert({
+        tenant_id: profile.tenant_id,
+        conversation_id: finalConvoId,
+        role: 'assistant',
+        content: answer,
+        cited_chunk_ids: matches.map((m) => m.id),
+      })
+
+      send({
+        type: 'done',
+        conversationId: finalConvoId,
+        sources: matches.map((m, i) => ({
+          filename: m.filename,
+          snippet: m.content.slice(0, 150),
+          verified: verifiedFlags[i + 1] ?? null,
+        })),
+      })
+
+      controller.close()
+    },
   })
 
-  return NextResponse.json({
-    conversationId: convoId,
-    answer,
-    sources: matches.map((m, i) => ({
-      filename: m.filename,
-      snippet: m.content.slice(0, 150),
-      verified: verifiedFlags[i + 1] ?? null,
-    })),
-    retrievalFailed,
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/plain; charset=utf-8',
+      'Cache-Control': 'no-cache',
+    },
   })
 }

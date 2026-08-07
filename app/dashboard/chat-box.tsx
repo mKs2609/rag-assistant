@@ -92,9 +92,6 @@ export default function ChatBox({
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, loading])
 
-  // While actively listening, mirror the live transcript into the input
-  // box. Once listening stops, this stops updating, and the last
-  // transcribed text just sits there ready to edit or send.
   useEffect(() => {
     if (isListening) {
       setInput(transcript)
@@ -140,9 +137,56 @@ export default function ChatBox({
         return
       }
 
-      const data = await res.json()
-      onConversationChange(data.conversationId)
-      setMessages((prev) => [...prev, { role: 'assistant', content: data.answer, sources: data.sources }])
+      if (!res.body) {
+        setError('No response received from the server.')
+        return
+      }
+
+      // Placeholder that grows in place as tokens arrive.
+      setMessages((prev) => [...prev, { role: 'assistant', content: '' }])
+
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() ?? ''
+
+        for (const line of lines) {
+          if (!line.trim()) continue
+          let event: any
+          try {
+            event = JSON.parse(line)
+          } catch {
+            continue
+          }
+
+          if (event.type === 'token') {
+            setMessages((prev) => {
+              const copy = [...prev]
+              const last = copy[copy.length - 1]
+              copy[copy.length - 1] = { ...last, content: last.content + event.text }
+              return copy
+            })
+          } else if (event.type === 'done') {
+            onConversationChange(event.conversationId)
+            setMessages((prev) => {
+              const copy = [...prev]
+              const last = copy[copy.length - 1]
+              copy[copy.length - 1] = { ...last, sources: event.sources }
+              return copy
+            })
+          } else if (event.type === 'error') {
+            setMessages((prev) => prev.slice(0, -1))
+            setError(event.error ?? 'Something went wrong')
+          }
+        }
+      }
     } catch (err) {
       setError('Network error — the request failed to complete. Please try again.')
     } finally {
@@ -206,6 +250,7 @@ export default function ChatBox({
         {messages.map((m, i) => {
           const messageId = i.toString()
           const isSpeaking = speakingId === messageId
+          const isEmptyAssistantPlaceholder = m.role === 'assistant' && m.content === ''
 
           return (
             <div key={i} className={(m.role === 'user' ? 'flex justify-end' : 'flex justify-start') + ' animate-message-in'}>
@@ -218,8 +263,16 @@ export default function ChatBox({
                       : 'bg-inkwell text-bone')
                   }
                 >
-                  <span className="flex-1">{m.content}</span>
-                  {m.role === 'assistant' && speechSupported && (
+                  {isEmptyAssistantPlaceholder ? (
+                    <span className="flex gap-1 py-0.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-pewter animate-bounce [animation-delay:-0.3s]" />
+                      <span className="w-1.5 h-1.5 rounded-full bg-pewter animate-bounce [animation-delay:-0.15s]" />
+                      <span className="w-1.5 h-1.5 rounded-full bg-pewter animate-bounce" />
+                    </span>
+                  ) : (
+                    <span className="flex-1 whitespace-pre-wrap">{m.content}</span>
+                  )}
+                  {m.role === 'assistant' && !isEmptyAssistantPlaceholder && speechSupported && (
                     <button
                       type="button"
                       onClick={() => (isSpeaking ? stopSpeaking() : speak(m.content, messageId))}
@@ -264,16 +317,6 @@ export default function ChatBox({
             </div>
           )
         })}
-
-        {loading && (
-          <div className="flex justify-start animate-message-in">
-            <div className="bg-inkwell rounded-lg px-4 py-3 flex gap-1 shadow-[rgba(4,4,7,0.25)_0px_2px_4px_0px,rgba(4,4,7,0.4)_0px_8px_24px_0px]">
-              <span className="w-1.5 h-1.5 rounded-full bg-pewter animate-bounce [animation-delay:-0.3s]" />
-              <span className="w-1.5 h-1.5 rounded-full bg-pewter animate-bounce [animation-delay:-0.15s]" />
-              <span className="w-1.5 h-1.5 rounded-full bg-pewter animate-bounce" />
-            </div>
-          </div>
-        )}
         <div ref={bottomRef} />
       </div>
 
