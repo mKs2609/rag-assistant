@@ -34,9 +34,12 @@ export default function EvalPanel({ documents }: { documents: Document[] }) {
   const [newDocId, setNewDocId] = useState('')
   const [newKeywords, setNewKeywords] = useState('')
   const [adding, setAdding] = useState(false)
-  const [running, setRunning] = useState(false)
-  const [results, setResults] = useState<EvalResult[] | null>(null)
-  const [scores, setScores] = useState<{ retrievalScore: number; answerScore: number } | null>(null)
+  const [runningAll, setRunningAll] = useState(false)
+  const [runningId, setRunningId] = useState<string | null>(null)
+  // Keyed by question id, so each result is tied to its own question and
+  // automatically disappears if that question is deleted — never stale,
+  // never showing a result next to the wrong question.
+  const [results, setResults] = useState<Record<string, EvalResult>>({})
   const [error, setError] = useState('')
 
   async function loadQuestions() {
@@ -86,30 +89,74 @@ export default function EvalPanel({ documents }: { documents: Document[] }) {
 
   async function handleDeleteQuestion(id: string) {
     await fetch(`/api/eval/questions/${id}`, { method: 'DELETE' })
+    setResults((prev) => {
+      const copy = { ...prev }
+      delete copy[id]
+      return copy
+    })
     loadQuestions()
   }
 
-  async function handleRunEval() {
-    setRunning(true)
+  async function handleRunAll() {
+    setRunningAll(true)
     setError('')
-    setResults(null)
-    setScores(null)
 
     const res = await fetch('/api/eval/run', { method: 'POST' })
     const data = await res.json()
 
-    setRunning(false)
+    setRunningAll(false)
 
     if (!res.ok) {
       setError(data.error ?? 'Evaluation failed')
       return
     }
 
-    setResults(data.results)
-    setScores({ retrievalScore: data.retrievalScore, answerScore: data.answerScore })
+    const next: Record<string, EvalResult> = {}
+    for (const r of data.results as EvalResult[]) {
+      next[r.questionId] = r
+    }
+    setResults((prev) => ({ ...prev, ...next }))
+  }
+
+  async function handleRunOne(questionId: string) {
+    setRunningId(questionId)
+    setError('')
+
+    const res = await fetch('/api/eval/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ questionId }),
+    })
+    const data = await res.json()
+
+    setRunningId(null)
+
+    if (!res.ok) {
+      setError(data.error ?? 'Evaluation failed')
+      return
+    }
+
+    const result: EvalResult | undefined = data.results?.[0]
+    if (result) {
+      setResults((prev) => ({ ...prev, [questionId]: result }))
+    }
   }
 
   const readyDocs = documents.filter((d) => d.status === 'ready')
+
+  // Only show results for questions that still exist, in the same order
+  // as the question list — deleting a question removes its card too,
+  // and a never-run question simply has no card yet.
+  const visibleResults = questions
+    .map((q) => results[q.id])
+    .filter((r): r is EvalResult => Boolean(r))
+
+  const retrievalScore = visibleResults.length
+    ? visibleResults.filter((r) => r.retrievalHit).length / visibleResults.length
+    : null
+  const answerScore = visibleResults.length
+    ? visibleResults.filter((r) => r.answerCorrect).length / visibleResults.length
+    : null
 
   return (
     <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-8 space-y-8">
@@ -162,11 +209,11 @@ export default function EvalPanel({ documents }: { documents: Document[] }) {
             Test questions ({questions.length})
           </p>
           <button
-            onClick={handleRunEval}
-            disabled={running || questions.length === 0}
+            onClick={handleRunAll}
+            disabled={runningAll || questions.length === 0}
             className="border border-slate text-bone rounded px-4 py-1.5 text-xs disabled:opacity-40 hover:bg-bone/10 transition-colors"
           >
-            {running ? 'Running…' : 'Run evaluation'}
+            {runningAll ? 'Running all…' : 'Run all'}
           </button>
         </div>
 
@@ -185,32 +232,45 @@ export default function EvalPanel({ documents }: { documents: Document[] }) {
                   {q.expected_keywords.length > 0 && ` · keywords: ${q.expected_keywords.join(', ')}`}
                 </p>
               </div>
-              <button
-                onClick={() => handleDeleteQuestion(q.id)}
-                className="text-red-400 hover:underline text-xs shrink-0"
-              >
-                Delete
-              </button>
+              <div className="flex items-center gap-3 shrink-0">
+                <button
+                  onClick={() => handleRunOne(q.id)}
+                  disabled={runningId === q.id}
+                  className="text-slate hover:text-bone text-xs disabled:opacity-40"
+                >
+                  {runningId === q.id ? 'Running…' : 'Run'}
+                </button>
+                <button
+                  onClick={() => handleDeleteQuestion(q.id)}
+                  className="text-red-400 hover:underline text-xs"
+                >
+                  Delete
+                </button>
+              </div>
             </li>
           ))}
         </ul>
       </div>
 
-      {scores && (
+      {visibleResults.length > 0 && (
         <div className="space-y-3">
           <div className="flex gap-4">
             <div className="bg-inkwell rounded-lg px-4 py-3 flex-1">
               <p className="text-xs text-pewter uppercase tracking-wide">Retrieval accuracy</p>
-              <p className="font-display text-3xl text-bone">{Math.round(scores.retrievalScore * 100)}%</p>
+              <p className="font-display text-3xl text-bone">
+                {retrievalScore !== null ? `${Math.round(retrievalScore * 100)}%` : '—'}
+              </p>
             </div>
             <div className="bg-inkwell rounded-lg px-4 py-3 flex-1">
               <p className="text-xs text-pewter uppercase tracking-wide">Answer accuracy</p>
-              <p className="font-display text-3xl text-bone">{Math.round(scores.answerScore * 100)}%</p>
+              <p className="font-display text-3xl text-bone">
+                {answerScore !== null ? `${Math.round(answerScore * 100)}%` : '—'}
+              </p>
             </div>
           </div>
 
           <div className="space-y-2">
-            {results?.map((r) => (
+            {visibleResults.map((r) => (
               <div key={r.questionId} className="bg-inkwell rounded-lg px-3 py-2 text-sm space-y-1">
                 <p className="text-bone">{r.question}</p>
                 <div className="flex gap-3 text-xs">

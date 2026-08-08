@@ -25,7 +25,7 @@ function significantWords(text: string): Set<string> {
   )
 }
 
-export async function POST() {
+export async function POST(request: Request) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
@@ -33,10 +33,25 @@ export async function POST() {
   const { data: profile } = await supabase.from('profiles').select('tenant_id').eq('id', user.id).single()
   if (!profile) return NextResponse.json({ error: 'Profile not found' }, { status: 404 })
 
-  const { data: questions } = await supabase
+  // Optional: run just one specific question instead of the whole set.
+  let questionId: string | undefined
+  try {
+    const body = await request.json()
+    questionId = body?.questionId
+  } catch {
+    // No body provided — run every question, same as before.
+  }
+
+  let query = supabase
     .from('eval_questions')
     .select('id, question, expected_document_id, expected_keywords')
     .order('created_at', { ascending: true })
+
+  if (questionId) {
+    query = query.eq('id', questionId)
+  }
+
+  const { data: questions } = await query 
 
   if (!questions || questions.length === 0) {
     return NextResponse.json({ error: 'No evaluation questions yet. Add some first.' }, { status: 400 })
