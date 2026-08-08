@@ -8,6 +8,7 @@ import DocumentUpload from './document-upload'
 import DocumentList from './document-list'
 import DocumentPicker from './document-picker'
 import LogoutButton from './logout-button'
+import EvalPanel from './eval-panel'
 import Strands from '@/components/Strands'
 
 interface Document {
@@ -30,6 +31,7 @@ export default function DashboardShell({
   const [pendingDocumentIds, setPendingDocumentIds] = useState<string[]>([])
   const [scopedDocumentIds, setScopedDocumentIds] = useState<string[] | null>(null)
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
+  const [view, setView] = useState<'chat' | 'eval'>('chat')
   const supabase = createClient()
 
   const scopedDocuments = scopedDocumentIds
@@ -153,16 +155,31 @@ export default function DashboardShell({
           />
         </div>
 
-        <div className="p-4">
+        <div className="p-4 space-y-2">
           <button
             onClick={() => {
               setPendingDocumentIds([])
               setPickerOpen(true)
               setMobileSidebarOpen(false)
+              setView('chat')
             }}
             className="w-full text-sm border border-ash text-bone px-3 py-2 hover:bg-bone/10 transition-colors"
           >
             + New chat
+          </button>
+          <button
+            onClick={() => {
+              setView(view === 'eval' ? 'chat' : 'eval')
+              setMobileSidebarOpen(false)
+            }}
+            className={
+              'w-full text-sm border px-3 py-2 transition-colors ' +
+              (view === 'eval'
+                ? 'border-[#c99a5b] text-[#c99a5b]'
+                : 'border-ash text-bone hover:bg-bone/10')
+            }
+          >
+            {view === 'eval' ? '← Back to chat' : 'Evaluate'}
           </button>
         </div>
 
@@ -204,16 +221,20 @@ export default function DashboardShell({
         )}
 
         <div className="relative z-0 flex-1 flex flex-col overflow-hidden">
-          <ChatBox
-            activeConversationId={activeConversationId}
-            onConversationChange={setActiveConversationId}
-            scopedDocumentIds={scopedDocumentIds}
-            scopedDocuments={scopedDocuments}
-            documents={documents}
-            tenantId={tenantId}
-            onAttachDocument={handleAttachDocument}
-            onRemoveDocument={handleRemoveDocument}
-          />
+          {view === 'eval' ? (
+            <EvalPanel documents={documents} />
+          ) : (
+            <ChatBox
+              activeConversationId={activeConversationId}
+              onConversationChange={setActiveConversationId}
+              scopedDocumentIds={scopedDocumentIds}
+              scopedDocuments={scopedDocuments}
+              documents={documents}
+              tenantId={tenantId}
+              onAttachDocument={handleAttachDocument}
+              onRemoveDocument={handleRemoveDocument}
+            />
+          )}
         </div>
       </main>
     </div>
