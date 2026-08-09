@@ -57,9 +57,20 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'No evaluation questions yet. Add some first.' }, { status: 400 })
   }
 
+  function sleep(ms: number) {
+    return new Promise((resolve) => setTimeout(resolve, ms))
+  }
+
   const results = []
 
-  for (const q of questions) {
+  for (let i = 0; i < questions.length; i++) {
+    const q = questions[i]
+    // Space out requests to Voyage — free-tier accounts without a payment
+    // method have a very tight per-minute limit, and running several
+    // questions back-to-back is exactly the kind of burst that trips it.
+    if (i > 0) {
+      await sleep(1200)
+    }
     try {
       const queryEmbedding = await embedQuery(q.question)
       const { data: matches } = await supabase.rpc('match_document_chunks', {

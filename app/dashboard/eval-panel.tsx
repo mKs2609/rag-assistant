@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 interface Document {
   id: string
@@ -36,11 +36,22 @@ export default function EvalPanel({ documents }: { documents: Document[] }) {
   const [adding, setAdding] = useState(false)
   const [runningAll, setRunningAll] = useState(false)
   const [runningId, setRunningId] = useState<string | null>(null)
-  // Keyed by question id, so each result is tied to its own question and
-  // automatically disappears if that question is deleted — never stale,
-  // never showing a result next to the wrong question.
   const [results, setResults] = useState<Record<string, EvalResult>>({})
   const [error, setError] = useState('')
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null)
+
+  const anyRunning = runningAll || runningId !== null
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      const target = e.target as HTMLElement
+      if (!target.closest('[data-eval-menu]')) {
+        setOpenMenuId(null)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
   async function loadQuestions() {
     setLoadingQuestions(true)
@@ -69,7 +80,14 @@ export default function EvalPanel({ documents }: { documents: Document[] }) {
       body: JSON.stringify({
         question: newQuestion,
         expectedDocumentId: newDocId || null,
-        expectedKeywords: newKeywords.split(',').map((k) => k.trim()).filter(Boolean),
+        // Split on commas AND whitespace, so "march 2026" behaves the
+        // same as "march, 2026" — previously, a phrase typed without a
+        // comma was treated as one single unmatchable keyword, which
+        // silently failed every check that used it.
+        expectedKeywords: newKeywords
+          .split(',')
+          .flatMap((segment) => segment.trim().split(/\s+/))
+          .filter(Boolean),
       }),
     })
 
@@ -88,6 +106,7 @@ export default function EvalPanel({ documents }: { documents: Document[] }) {
   }
 
   async function handleDeleteQuestion(id: string) {
+    setOpenMenuId(null)
     await fetch(`/api/eval/questions/${id}`, { method: 'DELETE' })
     setResults((prev) => {
       const copy = { ...prev }
@@ -119,6 +138,7 @@ export default function EvalPanel({ documents }: { documents: Document[] }) {
   }
 
   async function handleRunOne(questionId: string) {
+    setOpenMenuId(null)
     setRunningId(questionId)
     setError('')
 
@@ -144,9 +164,6 @@ export default function EvalPanel({ documents }: { documents: Document[] }) {
 
   const readyDocs = documents.filter((d) => d.status === 'ready')
 
-  // Only show results for questions that still exist, in the same order
-  // as the question list — deleting a question removes its card too,
-  // and a never-run question simply has no card yet.
   const visibleResults = questions
     .map((q) => results[q.id])
     .filter((r): r is EvalResult => Boolean(r))
@@ -174,7 +191,7 @@ export default function EvalPanel({ documents }: { documents: Document[] }) {
           value={newQuestion}
           onChange={(e) => setNewQuestion(e.target.value)}
           placeholder="e.g. When was the Build an AI Agent certificate issued?"
-          className="w-full border border-slate bg-carbon text-bone rounded px-3 py-2 text-sm"
+          className="w-full border border-slate bg-carbon text-bone placeholder:text-pewter rounded px-3 py-2 text-sm"
         />
         <select
           value={newDocId}
@@ -186,13 +203,18 @@ export default function EvalPanel({ documents }: { documents: Document[] }) {
             <option key={d.id} value={d.id}>{d.filename}</option>
           ))}
         </select>
-        <input
-          type="text"
-          value={newKeywords}
-          onChange={(e) => setNewKeywords(e.target.value)}
-          placeholder="Expected keywords in answer, comma-separated (e.g. march, 2026)"
-          className="w-full border border-slate bg-carbon text-bone rounded px-3 py-2 text-sm"
-        />
+        <div>
+          <input
+            type="text"
+            value={newKeywords}
+            onChange={(e) => setNewKeywords(e.target.value)}
+            placeholder="Expected keywords, e.g. march 2026"
+            className="w-full border border-slate bg-carbon text-bone placeholder:text-pewter rounded px-3 py-2 text-sm"
+          />
+          <p className="text-xs text-pewter mt-1">
+            Each word is checked individually against the answer — commas are optional.
+          </p>
+        </div>
         <button
           type="submit"
           disabled={adding || !newQuestion.trim()}
@@ -210,8 +232,8 @@ export default function EvalPanel({ documents }: { documents: Document[] }) {
           </p>
           <button
             onClick={handleRunAll}
-            disabled={runningAll || questions.length === 0}
-            className="border border-slate text-bone rounded px-4 py-1.5 text-xs disabled:opacity-40 hover:bg-bone/10 transition-colors"
+            disabled={anyRunning || questions.length === 0}
+            className="border border-[#c99a5b] text-[#c99a5b] rounded px-4 py-1.5 text-xs disabled:opacity-40 hover:bg-[#c99a5b]/10 transition-colors"
           >
             {runningAll ? 'Running all…' : 'Run all'}
           </button>
@@ -224,7 +246,11 @@ export default function EvalPanel({ documents }: { documents: Document[] }) {
 
         <ul className="space-y-1">
           {questions.map((q) => (
-            <li key={q.id} className="flex items-center justify-between gap-2 bg-inkwell rounded-lg px-3 py-2 text-sm">
+            <li
+              key={q.id}
+              data-eval-menu
+              className="relative flex items-center justify-between gap-2 bg-inkwell rounded-lg px-3 py-2 text-sm"
+            >
               <div className="min-w-0">
                 <p className="text-bone truncate">{q.question}</p>
                 <p className="text-xs text-pewter truncate">
@@ -232,21 +258,32 @@ export default function EvalPanel({ documents }: { documents: Document[] }) {
                   {q.expected_keywords.length > 0 && ` · keywords: ${q.expected_keywords.join(', ')}`}
                 </p>
               </div>
-              <div className="flex items-center gap-3 shrink-0">
-                <button
-                  onClick={() => handleRunOne(q.id)}
-                  disabled={runningId === q.id}
-                  className="text-slate hover:text-bone text-xs disabled:opacity-40"
-                >
-                  {runningId === q.id ? 'Running…' : 'Run'}
-                </button>
-                <button
-                  onClick={() => handleDeleteQuestion(q.id)}
-                  className="text-red-400 hover:underline text-xs"
-                >
-                  Delete
-                </button>
-              </div>
+
+              <button
+                onClick={() => setOpenMenuId(openMenuId === q.id ? null : q.id)}
+                className="shrink-0 text-bone hover:text-[#c99a5b] px-1"
+                aria-label="Question options"
+              >
+                ⋯
+              </button>
+
+              {openMenuId === q.id && (
+                <div className="absolute right-0 top-full mt-1 z-30 w-32 bg-inkwell border border-slate rounded-lg shadow-[rgba(4,4,7,0.25)_0px_2px_4px_0px,rgba(4,4,7,0.4)_0px_8px_24px_0px] py-1">
+                  <button
+                    onClick={() => handleRunOne(q.id)}
+                    disabled={anyRunning}
+                    className="w-full text-left px-3 py-2 text-sm text-[#c99a5b] hover:bg-bone/10 disabled:opacity-40"
+                  >
+                    {runningId === q.id ? 'Running…' : 'Run'}
+                  </button>
+                  <button
+                    onClick={() => handleDeleteQuestion(q.id)}
+                    className="w-full text-left px-3 py-2 text-sm text-red-400 hover:bg-bone/10"
+                  >
+                    Delete
+                  </button>
+                </div>
+              )}
             </li>
           ))}
         </ul>
@@ -274,10 +311,10 @@ export default function EvalPanel({ documents }: { documents: Document[] }) {
               <div key={r.questionId} className="bg-inkwell rounded-lg px-3 py-2 text-sm space-y-1">
                 <p className="text-bone">{r.question}</p>
                 <div className="flex gap-3 text-xs">
-                  <span className={r.retrievalHit ? 'text-slate' : 'text-red-400'}>
+                  <span className={r.retrievalHit ? 'text-bone' : 'text-red-400'}>
                     {r.retrievalHit ? '✓ retrieval' : '✗ retrieval'}
                   </span>
-                  <span className={r.answerCorrect ? 'text-slate' : 'text-red-400'}>
+                  <span className={r.answerCorrect ? 'text-bone' : 'text-red-400'}>
                     {r.answerCorrect ? '✓ answer' : '✗ answer'}
                   </span>
                 </div>
