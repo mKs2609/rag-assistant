@@ -12,7 +12,7 @@ export default async function DashboardPage() {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('tenant_id, tenants(name)')
+    .select('tenant_id, role, tenants(name)')
     .eq('id', user.id)
     .single()
 
@@ -26,6 +26,8 @@ export default async function DashboardPage() {
       workspaceName={(profile?.tenants as any)?.name ?? 'Your workspace'}
       documents={documents ?? []}
       tenantId={profile?.tenant_id ?? ''}
+      currentUserRole={profile?.role ?? 'member'}
+      currentUserId={user.id}
     />
   )
 }

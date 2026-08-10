@@ -179,7 +179,7 @@ export default function EvalPanel({ documents }: { documents: Document[] }) {
     <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-8 space-y-8">
       <div>
         <h2 className="font-display text-2xl text-bone mb-1">Evaluation</h2>
-        <p className="text-sm text-pewter">
+        <p className="text-sm text-bone/70">
           Test retrieval and answer quality against known question/answer pairs — not just a manual spot-check.
         </p>
       </div>
@@ -191,7 +191,7 @@ export default function EvalPanel({ documents }: { documents: Document[] }) {
           value={newQuestion}
           onChange={(e) => setNewQuestion(e.target.value)}
           placeholder="e.g. When was the Build an AI Agent certificate issued?"
-          className="w-full border border-slate bg-carbon text-bone placeholder:text-pewter rounded px-3 py-2 text-sm"
+          className="w-full border border-slate bg-carbon text-bone placeholder:text-bone/70 rounded px-3 py-2 text-sm"
         />
         <select
           value={newDocId}
@@ -209,9 +209,9 @@ export default function EvalPanel({ documents }: { documents: Document[] }) {
             value={newKeywords}
             onChange={(e) => setNewKeywords(e.target.value)}
             placeholder="Expected keywords, e.g. march 2026"
-            className="w-full border border-slate bg-carbon text-bone placeholder:text-pewter rounded px-3 py-2 text-sm"
+            className="w-full border border-slate bg-carbon text-bone placeholder:text-bone/70 rounded px-3 py-2 text-sm"
           />
-          <p className="text-xs text-pewter mt-1">
+          <p className="text-xs text-bone/70 mt-1">
             Each word is checked individually against the answer — commas are optional.
           </p>
         </div>
@@ -239,9 +239,9 @@ export default function EvalPanel({ documents }: { documents: Document[] }) {
           </button>
         </div>
 
-        {loadingQuestions && <p className="text-sm text-pewter">Loading…</p>}
+        {loadingQuestions && <p className="text-sm text-bone/70">Loading…</p>}
         {!loadingQuestions && questions.length === 0 && (
-          <p className="text-sm text-pewter">No test questions yet — add one above to get started.</p>
+          <p className="text-sm text-bone/70">No test questions yet — add one above to get started.</p>
         )}
 
         <ul className="space-y-1">
@@ -253,7 +253,7 @@ export default function EvalPanel({ documents }: { documents: Document[] }) {
             >
               <div className="min-w-0">
                 <p className="text-bone truncate">{q.question}</p>
-                <p className="text-xs text-pewter truncate">
+                <p className="text-xs text-bone/70 truncate">
                   {q.documents?.filename ? `Expects: ${q.documents.filename}` : 'No expected document set'}
                   {q.expected_keywords.length > 0 && ` · keywords: ${q.expected_keywords.join(', ')}`}
                 </p>
@@ -293,13 +293,13 @@ export default function EvalPanel({ documents }: { documents: Document[] }) {
         <div className="space-y-3">
           <div className="flex gap-4">
             <div className="bg-inkwell rounded-lg px-4 py-3 flex-1">
-              <p className="text-xs text-pewter uppercase tracking-wide">Retrieval accuracy</p>
+              <p className="text-xs text-bone/70 uppercase tracking-wide">Retrieval accuracy</p>
               <p className="font-display text-3xl text-bone">
                 {retrievalScore !== null ? `${Math.round(retrievalScore * 100)}%` : '—'}
               </p>
             </div>
             <div className="bg-inkwell rounded-lg px-4 py-3 flex-1">
-              <p className="text-xs text-pewter uppercase tracking-wide">Answer accuracy</p>
+              <p className="text-xs text-bone/70 uppercase tracking-wide">Answer accuracy</p>
               <p className="font-display text-3xl text-bone">
                 {answerScore !== null ? `${Math.round(answerScore * 100)}%` : '—'}
               </p>
@@ -321,7 +321,7 @@ export default function EvalPanel({ documents }: { documents: Document[] }) {
                 {r.error ? (
                   <p className="text-xs text-red-400">{r.error}</p>
                 ) : (
-                  <p className="text-xs text-pewter">{r.answer}</p>
+                  <p className="text-xs text-bone/70">{r.answer}</p>
                 )}
               </div>
             ))}

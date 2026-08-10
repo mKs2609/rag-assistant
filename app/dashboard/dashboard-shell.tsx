@@ -9,7 +9,7 @@ import DocumentList from './document-list'
 import DocumentPicker from './document-picker'
 import LogoutButton from './logout-button'
 import EvalPanel from './eval-panel'
-import Strands from '@/components/Strands'
+import TeamPanel from './team-panel'
 
 interface Document {
   id: string
@@ -21,17 +21,21 @@ export default function DashboardShell({
   workspaceName,
   documents,
   tenantId,
+  currentUserRole,
+  currentUserId,
 }: {
   workspaceName: string
   documents: Document[]
   tenantId: string
+  currentUserRole: string
+  currentUserId: string
 }) {
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [pendingDocumentIds, setPendingDocumentIds] = useState<string[]>([])
   const [scopedDocumentIds, setScopedDocumentIds] = useState<string[] | null>(null)
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
-  const [view, setView] = useState<'chat' | 'eval'>('chat')
+  const [view, setView] = useState<'chat' | 'eval' | 'team'>('chat')
   const supabase = createClient()
 
   const scopedDocuments = scopedDocumentIds
@@ -43,6 +47,7 @@ export default function DashboardShell({
   async function handleSelectConversation(id: string | null) {
     setActiveConversationId(id)
     setMobileSidebarOpen(false)
+    setView('chat')
 
     if (!id) {
       setScopedDocumentIds(null)
@@ -133,28 +138,6 @@ export default function DashboardShell({
           <LogoutButton />
         </div>
 
-        <div className="relative h-32 border-b border-ash overflow-hidden">
-          <Strands
-            colors={['#F97316', '#7C3AED', '#06B6D4']}
-            count={3}
-            speed={0.5}
-            amplitude={1}
-            waviness={1}
-            thickness={0.7}
-            glow={2.6}
-            taper={3}
-            spread={1}
-            intensity={0.6}
-            saturation={1.5}
-            opacity={1}
-            scale={2.2}
-            glass={false}
-            refraction={1}
-            dispersion={1}
-            glassSize={1}
-          />
-        </div>
-
         <div className="p-4 space-y-2">
           <button
             onClick={() => {
@@ -180,6 +163,20 @@ export default function DashboardShell({
             }
           >
             {view === 'eval' ? '← Back to chat' : 'Evaluate'}
+          </button>
+          <button
+            onClick={() => {
+              setView(view === 'team' ? 'chat' : 'team')
+              setMobileSidebarOpen(false)
+            }}
+            className={
+              'w-full text-sm border px-3 py-2 transition-colors ' +
+              (view === 'team'
+                ? 'border-[#c99a5b] text-[#c99a5b]'
+                : 'border-ash text-bone hover:bg-bone/10')
+            }
+          >
+            {view === 'team' ? '← Back to chat' : 'Team'}
           </button>
         </div>
 
@@ -223,6 +220,8 @@ export default function DashboardShell({
         <div className="relative z-0 flex-1 flex flex-col overflow-hidden">
           {view === 'eval' ? (
             <EvalPanel documents={documents} />
+          ) : view === 'team' ? (
+            <TeamPanel currentUserId={currentUserId} currentUserRole={currentUserRole} />
           ) : (
             <ChatBox
               activeConversationId={activeConversationId}
