@@ -55,6 +55,7 @@ export default function ChatBox({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [attaching, setAttaching] = useState(false)
+  const [messagesLoading, setMessagesLoading] = useState(false)
   const supabase = createClient()
   const router = useRouter()
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -69,8 +70,10 @@ export default function ChatBox({
     async function loadMessages() {
       if (!activeConversationId) {
         setMessages([])
+        setMessagesLoading(false)
         return
       }
+      setMessagesLoading(true)
       const { data } = await supabase
         .from('messages')
         .select('role, content')
@@ -79,6 +82,7 @@ export default function ChatBox({
 
       if (!cancelled) {
         setMessages((data as Message[]) ?? [])
+        setMessagesLoading(false)
       }
     }
     loadMessages()
@@ -240,10 +244,20 @@ export default function ChatBox({
       )}
 
       <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-10 space-y-6">
-        {messages.length === 0 && !loading && (
+        {messagesLoading && (
+          <div className="h-full flex items-center justify-center">
+            <div className="flex gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-bone/40 animate-bounce [animation-delay:-0.3s]" />
+              <span className="w-1.5 h-1.5 rounded-full bg-bone/40 animate-bounce [animation-delay:-0.15s]" />
+              <span className="w-1.5 h-1.5 rounded-full bg-bone/40 animate-bounce" />
+            </div>
+          </div>
+        )}
+
+        {!messagesLoading && messages.length === 0 && !loading && (
           <div className="h-full flex flex-col items-center justify-center gap-2 text-center">
             <p className="font-display text-4xl text-bone tracking-wide">Ask something</p>
-            <p className="text-sm text-pewter">about your documents</p>
+            <p className="text-sm text-bone/70">about your documents</p>
           </div>
         )}
 
