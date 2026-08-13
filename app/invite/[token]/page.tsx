@@ -16,6 +16,7 @@ export default function InvitePage() {
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [displayName, setDisplayName] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -44,7 +45,7 @@ export default function InvitePage() {
     const res = await fetch('/api/tenants', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password, inviteToken: token }),
+      body: JSON.stringify({ email, password, inviteToken: token, displayName }),
     })
 
     const data = await res.json()
@@ -115,6 +116,14 @@ export default function InvitePage() {
               <h1 className="text-xl font-medium font-display text-bone">Join {workspaceName}</h1>
               <p className="text-bone/70 text-sm">Create your account to join this workspace.</p>
               <form onSubmit={handleSubmit} className="space-y-3">
+                <input
+                  type="text"
+                  placeholder="Your name"
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                  className="w-full border border-ash rounded px-3 py-2 bg-obsidian/60 text-bone placeholder:text-fog"
+                  required
+                />
                 <input
                   type="email"
                   placeholder="Email"

@@ -22,7 +22,7 @@ export async function POST(request: Request) {
     console.error('Failed to record signup rate-limit entry:', rateLimitLogError.message)
   }
 
-  const { email, password, tenantName, inviteToken } = await request.json()
+  const { email, password, tenantName, inviteToken, displayName } = await request.json()
 
   if (!email || !password) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
@@ -66,6 +66,7 @@ export async function POST(request: Request) {
       tenant_id: invite.tenant_id,
       email,
       role: invite.role,
+      display_name: displayName || null,
     })
 
     if (profileError) {

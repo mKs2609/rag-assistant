@@ -6,8 +6,9 @@ interface Member {
   id: string
   email: string
   role: string
+  display_name: string | null
   created_at: string
-}
+} 
 
 interface Invite {
   id: string
@@ -18,8 +19,9 @@ interface Invite {
   created_at: string
 }
 
-function friendlyName(email: string): string {
-  const localPart = email.split('@')[0] ?? email
+function friendlyName(member: { display_name: string | null; email: string }): string {
+  if (member.display_name) return member.display_name
+  const localPart = member.email.split('@')[0] ?? member.email
   return localPart.split('+')[0] ?? localPart
 }
 
@@ -44,10 +46,15 @@ export default function TeamPanel({
 
   async function loadAll() {
     setLoading(true)
+    setError('')
+
     const memberRes = await fetch('/api/team')
     if (memberRes.ok) {
       const data = await memberRes.json()
       setMembers(data.members ?? [])
+    } else {
+      const data = await memberRes.json().catch(() => ({}))
+      setError(data.error ?? `Could not load team members (status ${memberRes.status}).`)
     }
 
     if (canManageInvites) {
@@ -55,6 +62,9 @@ export default function TeamPanel({
       if (inviteRes.ok) {
         const data = await inviteRes.json()
         setInvites(data.invites ?? [])
+      } else {
+        const data = await inviteRes.json().catch(() => ({}))
+        setError((prev) => prev || data.error || `Could not load invites (status ${inviteRes.status}).`)
       }
     }
     setLoading(false)
@@ -142,7 +152,7 @@ export default function TeamPanel({
               {members.map((m) => (
                 <li key={m.id} className="flex items-center justify-between bg-inkwell rounded-lg px-3 py-2 text-sm gap-2">
                   <div className="min-w-0">
-                    <p className="text-bone truncate">{friendlyName(m.email)}</p>
+                    <p className="text-bone truncate">{friendlyName(m)}</p>
                     <p className="text-xs text-bone/60 truncate">{m.email}</p>
                   </div>
                   <div className="flex items-center gap-3 shrink-0">
