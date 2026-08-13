@@ -170,9 +170,7 @@ export default function TeamPanel({
                 </li>
               ))}
             </ul>
-            <p className="text-xs text-bone/50">
-              Names are derived from email addresses — a proper display name setting may come later.
-            </p>
+            
           </div>
 
           {canManageInvites && (
