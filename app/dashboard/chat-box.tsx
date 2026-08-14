@@ -31,6 +31,39 @@ interface ScopedDocument {
   filename: string
 }
 
+// Gemini's answers use plain markdown — mainly **bold** for emphasis and
+// "* " for bullet points — but the chat only ever rendered raw text, so
+// those asterisks showed up literally instead of as real formatting.
+function renderFormattedText(text: string) {
+  return text.split('\n').map((line, i) => {
+    const bulletMatch = line.match(/^\s*\*\s+(.*)/)
+    const content = bulletMatch ? bulletMatch[1] : line
+    const parts = content.split(/(\*\*[^*]+\*\*)/g).map((part, j) =>
+      part.startsWith('**') && part.endsWith('**') ? (
+        <strong key={j} className="font-semibold">{part.slice(2, -2)}</strong>
+      ) : (
+        part
+      )
+    )
+    return (
+      <span key={i} className="block">
+        {bulletMatch && '• '}
+        {parts}
+      </span>
+    )
+  })
+}
+
+// A separate, plainer version just for text-to-speech — hearing "asterisk
+// asterisk" or "bracket one" spoken aloud would be worse than the
+// original visual glitch this is fixing.
+function stripMarkdownForSpeech(text: string): string {
+  return text
+    .replace(/\*\*(.+?)\*\*/g, '$1')
+    .replace(/^\s*\*\s+/gm, '')
+    .replace(/\[\d+\]/g, '')
+}
+
 export default function ChatBox({
   activeConversationId,
   onConversationChange,
@@ -284,12 +317,12 @@ export default function ChatBox({
                       <span className="w-1.5 h-1.5 rounded-full bg-pewter animate-bounce" />
                     </span>
                   ) : (
-                    <span className="flex-1 whitespace-pre-wrap">{m.content}</span>
+                    <span className="flex-1 whitespace-pre-wrap">{renderFormattedText(m.content)}</span>
                   )}
                   {m.role === 'assistant' && !isEmptyAssistantPlaceholder && speechSupported && (
                     <button
                       type="button"
-                      onClick={() => (isSpeaking ? stopSpeaking() : speak(m.content, messageId))}
+                      onClick={() => (isSpeaking ? stopSpeaking() : speak(stripMarkdownForSpeech(m.content), messageId))}
                       className="text-pewter hover:text-bone shrink-0 mt-0.5"
                       aria-label={isSpeaking ? 'Stop reading aloud' : 'Read this message aloud'}
                     >
