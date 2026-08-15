@@ -118,6 +118,7 @@ export async function POST(request: Request) {
     tenant_id: tenant.id,
     email,
     role: 'owner',
+    display_name: displayName || null,
   })
 
   if (profileError) {

@@ -9,6 +9,7 @@ export default function SignupPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [tenantName, setTenantName] = useState('')
+  const [displayName, setDisplayName] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
@@ -22,7 +23,7 @@ export default function SignupPage() {
     const res = await fetch('/api/tenants', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password, tenantName }),
+      body: JSON.stringify({ email, password, tenantName, displayName }),
     })
 
     const data = await res.json()
@@ -79,6 +80,14 @@ export default function SignupPage() {
               placeholder="Workspace name"
               value={tenantName}
               onChange={(e) => setTenantName(e.target.value)}
+              className="w-full border border-ash rounded px-3 py-2 bg-obsidian/60 text-bone placeholder:text-fog"
+              required
+            />
+            <input
+              type="text"
+              placeholder="Your name"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
               className="w-full border border-ash rounded px-3 py-2 bg-obsidian/60 text-bone placeholder:text-fog"
               required
             />
