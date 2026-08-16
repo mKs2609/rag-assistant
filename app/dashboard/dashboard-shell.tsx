@@ -18,7 +18,7 @@ interface Document {
 }
 
 export default function DashboardShell({
-  workspaceName,
+  workspaceName: initialWorkspaceName,
   documents,
   tenantId,
   currentUserRole,
@@ -30,6 +30,7 @@ export default function DashboardShell({
   currentUserRole: string
   currentUserId: string
 }) {
+  const [workspaceName, setWorkspaceName] = useState(initialWorkspaceName)
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [pendingDocumentIds, setPendingDocumentIds] = useState<string[]>([])
@@ -134,7 +135,7 @@ export default function DashboardShell({
         }
       >
         <div className="p-4 border-b border-ash flex items-center justify-between">
-          <h1 className="font-display text-lg text-bone">{workspaceName}</h1>
+          <h1 className="font-display text-lg text-bone truncate">{workspaceName}</h1>
           <LogoutButton />
         </div>
 
@@ -221,7 +222,12 @@ export default function DashboardShell({
           {view === 'eval' ? (
             <EvalPanel documents={documents} />
           ) : view === 'team' ? (
-            <TeamPanel currentUserId={currentUserId} currentUserRole={currentUserRole} />
+            <TeamPanel
+              currentUserId={currentUserId}
+              currentUserRole={currentUserRole}
+              workspaceName={workspaceName}
+              onRenameWorkspace={setWorkspaceName}
+            />
           ) : (
             <ChatBox
               activeConversationId={activeConversationId}

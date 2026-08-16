@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { createClient } from '@/lib/supabase/server'
 
 export async function POST(request: Request) {
   const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown'
@@ -128,4 +129,29 @@ export async function POST(request: Request) {
   }
 
   return NextResponse.json({ success: true, tenantId: tenant.id })
+}
+
+export async function PATCH(request: Request) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+
+  const { data: profile } = await supabase.from('profiles').select('tenant_id, role').eq('id', user.id).single()
+  if (!profile) return NextResponse.json({ error: 'Profile not found' }, { status: 404 })
+
+  if (profile.role !== 'owner') {
+    return NextResponse.json({ error: 'Only the workspace owner can rename the workspace' }, { status: 403 })
+  }
+
+  const { name } = await request.json()
+  if (!name || typeof name !== 'string' || !name.trim()) {
+    return NextResponse.json({ error: 'A workspace name is required' }, { status: 400 })
+  }
+
+  const cleanName = name.trim().slice(0, 60)
+
+  const { error } = await supabase.from('tenants').update({ name: cleanName }).eq('id', profile.tenant_id)
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ success: true, name: cleanName })
 }

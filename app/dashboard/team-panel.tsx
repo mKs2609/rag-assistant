@@ -8,7 +8,7 @@ interface Member {
   role: string
   display_name: string | null
   created_at: string
-} 
+}
 
 interface Invite {
   id: string
@@ -28,9 +28,13 @@ function friendlyName(member: { display_name: string | null; email: string }): s
 export default function TeamPanel({
   currentUserId,
   currentUserRole,
+  workspaceName,
+  onRenameWorkspace,
 }: {
   currentUserId: string
   currentUserRole: string
+  workspaceName: string
+  onRenameWorkspace: (name: string) => void
 }) {
   const [members, setMembers] = useState<Member[]>([])
   const [invites, setInvites] = useState<Invite[]>([])
@@ -41,8 +45,13 @@ export default function TeamPanel({
   const [error, setError] = useState('')
   const [copiedToken, setCopiedToken] = useState<string | null>(null)
 
+  const [editingName, setEditingName] = useState(false)
+  const [nameDraft, setNameDraft] = useState(workspaceName)
+  const [savingName, setSavingName] = useState(false)
+
   const canManageInvites = currentUserRole === 'owner' || currentUserRole === 'admin'
   const canRemoveMembers = currentUserRole === 'owner'
+  const canRenameWorkspace = currentUserRole === 'owner'
 
   async function loadAll() {
     setLoading(true)
@@ -74,6 +83,32 @@ export default function TeamPanel({
     loadAll()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  async function handleSaveName() {
+    const trimmed = nameDraft.trim()
+    if (!trimmed || trimmed === workspaceName) {
+      setEditingName(false)
+      setNameDraft(workspaceName)
+      return
+    }
+
+    setSavingName(true)
+    const res = await fetch('/api/tenants', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: trimmed }),
+    })
+    setSavingName(false)
+
+    if (res.ok) {
+      const data = await res.json()
+      onRenameWorkspace(data.name)
+      setEditingName(false)
+    } else {
+      const data = await res.json().catch(() => ({}))
+      setError(data.error ?? 'Failed to rename workspace')
+    }
+  }
 
   async function handleGenerateInvite() {
     setGenerating(true)
@@ -133,8 +168,55 @@ export default function TeamPanel({
 
   return (
     <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-8 space-y-8">
-      <div>
-        <h2 className="font-display text-2xl text-bone mb-1">Team</h2>
+      <div className="space-y-1">
+        {editingName ? (
+          <div className="flex items-center gap-2">
+            <input
+              autoFocus
+              value={nameDraft}
+              onChange={(e) => setNameDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleSaveName()
+                if (e.key === 'Escape') {
+                  setEditingName(false)
+                  setNameDraft(workspaceName)
+                }
+              }}
+              className="font-display text-2xl text-bone bg-inkwell border border-slate rounded px-2 py-1 outline-none"
+            />
+            <button
+              onClick={handleSaveName}
+              disabled={savingName}
+              className="text-[#c99a5b] text-sm hover:underline disabled:opacity-40"
+            >
+              {savingName ? 'Saving…' : 'Save'}
+            </button>
+            <button
+              onClick={() => {
+                setEditingName(false)
+                setNameDraft(workspaceName)
+              }}
+              className="text-bone/70 text-sm hover:underline"
+            >
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <h2 className="font-display text-2xl text-bone">{workspaceName}</h2>
+            {canRenameWorkspace && (
+              <button
+                onClick={() => {
+                  setNameDraft(workspaceName)
+                  setEditingName(true)
+                }}
+                className="text-[#c99a5b] text-xs hover:underline"
+              >
+                Rename
+              </button>
+            )}
+          </div>
+        )}
         <p className="text-sm text-bone/70">Everyone with access to this workspace.</p>
       </div>
 
@@ -170,7 +252,6 @@ export default function TeamPanel({
                 </li>
               ))}
             </ul>
-            
           </div>
 
           {canManageInvites && (
