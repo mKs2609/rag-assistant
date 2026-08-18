@@ -97,6 +97,42 @@ export default function ChatBox({
     useSpeechRecognition()
   const { speak, stop: stopSpeaking, speakingId, isSupported: speechSupported } = useSpeechSynthesis()
 
+  function handleExport() {
+    const lines: string[] = []
+    lines.push('Conversation Export')
+    lines.push(new Date().toLocaleString())
+    lines.push('='.repeat(40))
+    lines.push('')
+
+    for (const m of messages) {
+      lines.push(m.role === 'user' ? 'You:' : 'Assistant:')
+      lines.push(m.content)
+
+      if (m.sources && m.sources.length > 0) {
+        lines.push('')
+        lines.push('Sources:')
+        m.sources.forEach((s, i) => {
+          const status = s.verified === true ? '(verified)' : s.verified === false ? '(unverified)' : ''
+          lines.push(`  [${i + 1}] ${s.filename} ${status}`)
+          lines.push(`      "${s.snippet}..."`)
+        })
+      }
+      lines.push('')
+      lines.push('-'.repeat(40))
+      lines.push('')
+    }
+
+    const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `conversation-${new Date().toISOString().slice(0, 10)}.txt`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
   useEffect(() => {
     let cancelled = false
 
@@ -254,6 +290,22 @@ export default function ChatBox({
 
   return (
     <div className="flex flex-col h-full bg-carbon">
+            {messages.length > 0 && (
+        <div className="flex justify-end px-4 sm:px-8 pt-2">
+          <button
+            onClick={handleExport}
+            className="text-xs text-bone/70 hover:text-bone flex items-center gap-1"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" strokeLinecap="round" strokeLinejoin="round" />
+              <polyline points="7 10 12 15 17 10" strokeLinecap="round" strokeLinejoin="round" />
+              <line x1="12" y1="15" x2="12" y2="3" strokeLinecap="round" />
+            </svg>
+            Download
+          </button>
+        </div>
+      )}
+
       {scopedDocuments && scopedDocuments.length > 0 && (
         <div className="px-4 sm:px-8 py-2 flex items-center gap-2 text-xs flex-wrap">
           <span className="font-medium text-pewter shrink-0">Focused on:</span>
