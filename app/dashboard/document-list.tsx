@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 
 interface Document {
@@ -15,10 +15,46 @@ const statusColor: Record<string, string> = {
   failed: 'bg-red-400',
 }
 
+const statusLabel: Record<string, string> = {
+  ready: 'Ready',
+  processing: 'Processing…',
+  failed: 'Failed to process',
+}
+
+const POLL_INTERVAL_MS = 3000
+// Roughly three minutes of polling. Processing is capped server-side, so a
+// document that hasn't resolved by now isn't going to — stop rather than
+// refreshing against a dead row forever.
+const MAX_POLLS = 60
+
 export default function DocumentList({ documents }: { documents: Document[] }) {
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [error, setError] = useState('')
   const router = useRouter()
+
+  // Extraction and embedding now finish after the upload response returns,
+  // so the row lands as "processing" and nothing would ever update it
+  // without asking the server again.
+  const hasProcessing = documents.some((d) => d.status === 'processing')
+  const pollCount = useRef(0)
+
+  useEffect(() => {
+    if (!hasProcessing) {
+      pollCount.current = 0
+      return
+    }
+
+    const timer = setInterval(() => {
+      pollCount.current += 1
+      if (pollCount.current > MAX_POLLS) {
+        clearInterval(timer)
+        return
+      }
+      router.refresh()
+    }, POLL_INTERVAL_MS)
+
+    return () => clearInterval(timer)
+  }, [hasProcessing, router])
 
   async function handleDelete(id: string) {
     setDeletingId(id)
@@ -44,10 +80,27 @@ export default function DocumentList({ documents }: { documents: Document[] }) {
         <ul className="space-y-0.5 max-h-32 overflow-y-auto">
           {documents.map((doc) => (
             <li key={doc.id} className="group flex items-center gap-2 px-1 py-1 text-xs">
-              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${statusColor[doc.status] ?? 'bg-fog'}`} />
+              <span
+                className={
+                  `w-1.5 h-1.5 rounded-full shrink-0 ${statusColor[doc.status] ?? 'bg-fog'} ` +
+                  (doc.status === 'processing' ? 'animate-pulse' : '')
+                }
+                title={statusLabel[doc.status] ?? doc.status}
+              />
               <span className="flex-1 truncate text-fog" title={doc.filename}>
                 {doc.filename}
               </span>
+              {doc.status === 'processing' && (
+                <span className="text-pewter shrink-0">processing…</span>
+              )}
+              {doc.status === 'failed' && (
+                <span
+                  className="text-red-400 shrink-0"
+                  title="Text extraction or embedding failed for this file"
+                >
+                  failed
+                </span>
+              )}
               <button
                 onClick={() => handleDelete(doc.id)}
                 disabled={deletingId === doc.id}

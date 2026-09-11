@@ -1,8 +1,14 @@
-import { NextResponse } from 'next/server'
+import { NextResponse, after } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { processDocument } from '@/lib/documents/process'
 
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024
+
+// Chunking and embedding a large PDF takes far longer than a normal request
+// should, and it runs in `after()` below — which shares this route's budget.
+// Without an explicit ceiling the platform default is short enough to kill
+// processing partway through, leaving the document stuck on "processing".
+export const maxDuration = 60
 
 export async function POST(request: Request) {
   try {
@@ -93,7 +99,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: dbError.message }, { status: 500 })
     }
 
-    await processDocument(document.id)
+    // Don't make the browser wait on extraction and embedding. The row is
+    // already saved as "processing", so the UI can show it immediately and
+    // poll until this finishes and flips it to "ready" or "failed".
+    after(() => processDocument(document.id))
 
     return NextResponse.json({ success: true, documentId: document.id })
   } catch (err) {

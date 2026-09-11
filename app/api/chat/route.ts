@@ -21,6 +21,11 @@ async function embedQuery(text: string): Promise<number[]> {
   return data.data[0].embedding
 }
 
+// How many earlier turns to replay to the model. Enough for follow-up
+// questions to make sense, capped so a long conversation can't grow the
+// prompt without bound.
+const MAX_HISTORY_MESSAGES = 10
+
 const STOPWORDS = new Set([
   'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'to',
   'of', 'in', 'on', 'at', 'for', 'with', 'by', 'from', 'as', 'and', 'or',
@@ -90,6 +95,7 @@ export async function POST(request: Request) {
   }
 
   let convoId = conversationId as string | undefined
+  let history: { role: string; content: string }[] = []
 
   if (convoId) {
     const { data: convo } = await supabase
@@ -100,6 +106,20 @@ export async function POST(request: Request) {
     if (!convo) {
       return NextResponse.json({ error: 'Conversation not found' }, { status: 404 })
     }
+
+    // Read the earlier turns before the new question is stored, so the
+    // model gets the conversation so far without seeing the current
+    // message twice. Without this the model answers every question cold
+    // and follow-ups like "what about the second one?" have nothing to
+    // refer back to.
+    const { data: priorMessages } = await supabase
+      .from('messages')
+      .select('role, content')
+      .eq('conversation_id', convoId)
+      .order('created_at', { ascending: false })
+      .limit(MAX_HISTORY_MESSAGES)
+
+    history = (priorMessages ?? []).reverse()
   } else {
     const { data: newConvo, error: convoError } = await supabase
       .from('conversations')
@@ -184,6 +204,22 @@ If the answer isn't in the reference material, say so clearly instead of guessin
 Reference material:
 ${context}`
 
+  // Gemini requires the turn list to start with a user message and to
+  // alternate from there, so drop any leading assistant turn before
+  // appending the question being asked now.
+  const trimmedHistory = [...history]
+  while (trimmedHistory.length > 0 && trimmedHistory[0].role !== 'user') {
+    trimmedHistory.shift()
+  }
+
+  const geminiContents = [
+    ...trimmedHistory.map((m) => ({
+      role: m.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: m.content }],
+    })),
+    { role: 'user', parts: [{ text: message }] },
+  ]
+
   const finalConvoId = convoId
   const encoder = new TextEncoder()
 
@@ -203,7 +239,7 @@ ${context}`
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({
               systemInstruction: { parts: [{ text: systemPrompt }] },
-              contents: [{ role: 'user', parts: [{ text: message }] }],
+              contents: geminiContents,
             }),
           }
         )
@@ -268,22 +304,29 @@ ${context}`
         }
       }
 
+      // Build the source list once and store it alongside the answer.
+      // The chat UI needs filename, snippet and verification result to
+      // redraw its citation cards, and recomputing them later isn't
+      // possible once a document (and its chunks) has been deleted.
+      const sources = matches.map((m, i) => ({
+        filename: m.filename,
+        snippet: m.content.slice(0, 150),
+        verified: verifiedFlags[i + 1] ?? null,
+      }))
+
       await supabase.from('messages').insert({
         tenant_id: profile.tenant_id,
         conversation_id: finalConvoId,
         role: 'assistant',
         content: answer,
         cited_chunk_ids: matches.map((m) => m.id),
+        sources,
       })
 
       send({
         type: 'done',
         conversationId: finalConvoId,
-        sources: matches.map((m, i) => ({
-          filename: m.filename,
-          snippet: m.content.slice(0, 150),
-          verified: verifiedFlags[i + 1] ?? null,
-        })),
+        sources,
       })
 
       controller.close()

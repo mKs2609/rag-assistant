@@ -143,14 +143,22 @@ export default function ChatBox({
         return
       }
       setMessagesLoading(true)
+      // Pull the stored sources back too — without them, reopening a
+      // conversation showed the answers with every citation card and
+      // verification badge stripped off.
       const { data } = await supabase
         .from('messages')
-        .select('role, content')
+        .select('role, content, sources')
         .eq('conversation_id', activeConversationId)
         .order('created_at', { ascending: true })
 
       if (!cancelled) {
-        setMessages((data as Message[]) ?? [])
+        const restored: Message[] = (data ?? []).map((m) => ({
+          role: m.role as 'user' | 'assistant',
+          content: m.content as string,
+          sources: (m.sources as Source[] | null) ?? undefined,
+        }))
+        setMessages(restored)
         setMessagesLoading(false)
       }
     }

@@ -1,6 +1,14 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { extractText as extractPdfText, getDocumentProxy } from 'unpdf'
 
+// Voyage caps a single embeddings request at 1000 inputs and a total token
+// budget per request. A large PDF easily produces more chunks than that, so
+// every request has to be split — sending the whole document at once fails
+// outright once a file gets big enough.
+const EMBED_BATCH_SIZE = 128
+const EMBED_BATCH_CHAR_BUDGET = 400_000
+const INSERT_BATCH_SIZE = 200
+
 function chunkText(text: string, chunkSize = 1000, overlap = 150): string[] {
   const chunks: string[] = []
   let start = 0
@@ -28,7 +36,37 @@ async function extractText(buffer: Buffer, filename: string): Promise<string> {
   throw new Error(`Unsupported file type: .${ext}. Supported: .pdf, .txt, .md`)
 }
 
-async function getEmbeddings(texts: string[]): Promise<number[][]> {
+// Group chunks so that no single request exceeds either the input-count cap
+// or a conservative character budget standing in for Voyage's token limit.
+function batchChunks(chunks: string[]): string[][] {
+  const batches: string[][] = []
+  let current: string[] = []
+  let currentChars = 0
+
+  for (const chunk of chunks) {
+    const wouldExceed =
+      current.length >= EMBED_BATCH_SIZE ||
+      (current.length > 0 && currentChars + chunk.length > EMBED_BATCH_CHAR_BUDGET)
+
+    if (wouldExceed) {
+      batches.push(current)
+      current = []
+      currentChars = 0
+    }
+
+    current.push(chunk)
+    currentChars += chunk.length
+  }
+
+  if (current.length > 0) batches.push(current)
+  return batches
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+async function embedBatch(texts: string[], attempt = 1): Promise<number[][]> {
   const res = await fetch('https://api.voyageai.com/v1/embeddings', {
     method: 'POST',
     headers: {
@@ -44,11 +82,36 @@ async function getEmbeddings(texts: string[]): Promise<number[][]> {
 
   if (!res.ok) {
     const errText = await res.text()
+    // Splitting a document into several requests makes hitting the
+    // per-minute rate limit far more likely than it was with one request,
+    // so a throttled or transient failure is worth retrying rather than
+    // failing the whole document.
+    const isRetryable = res.status === 429 || res.status >= 500
+    if (isRetryable && attempt < 4) {
+      await sleep(attempt * 2000)
+      return embedBatch(texts, attempt + 1)
+    }
     throw new Error(`Voyage API error (${res.status}): ${errText}`)
   }
 
   const data = await res.json()
   return data.data.map((d: { embedding: number[] }) => d.embedding)
+}
+
+async function getEmbeddings(texts: string[]): Promise<number[][]> {
+  const batches = batchChunks(texts)
+  const embeddings: number[][] = []
+
+  for (let i = 0; i < batches.length; i++) {
+    if (i > 0) await sleep(300)
+    embeddings.push(...(await embedBatch(batches[i])))
+  }
+
+  if (embeddings.length !== texts.length) {
+    throw new Error(`Embedding count mismatch: expected ${texts.length}, got ${embeddings.length}`)
+  }
+
+  return embeddings
 }
 
 // Runs the whole pipeline for one document: download → extract text →
@@ -94,8 +157,14 @@ export async function processDocument(documentId: string) {
       chunk_index: i,
     }))
 
-    const { error: insertError } = await admin.from('document_chunks').insert(rows)
-    if (insertError) throw new Error(insertError.message)
+    // A few thousand rows carrying full embedding vectors is a large enough
+    // payload to be worth splitting on the way in too.
+    for (let i = 0; i < rows.length; i += INSERT_BATCH_SIZE) {
+      const { error: insertError } = await admin
+        .from('document_chunks')
+        .insert(rows.slice(i, i + INSERT_BATCH_SIZE))
+      if (insertError) throw new Error(insertError.message)
+    }
 
     await admin.from('documents').update({ status: 'ready' }).eq('id', documentId)
   } catch (err) {
