@@ -13,8 +13,7 @@ export async function PATCH(request: Request) {
 
   const cleanName = displayName.trim().slice(0, 60)
 
-  // Every logged-in user updates only their own profile row — no owner
-  // or admin permission needed, unlike renaming the whole workspace.
+  // users can only update their own profile
   const { error } = await supabase.from('profiles').update({ display_name: cleanName }).eq('id', user.id)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

@@ -2,13 +2,9 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 
-// This single [id] segment serves two different callers that happen to
-// share the same URL shape: the public invite page passes the invite's
-// random token here to check validity (GET), while the owner's "Revoke"
-// button passes the invite's real database id to delete it (DELETE).
-// Next.js requires one consistent segment name per directory level, so
-// both live here instead of two separate folders — which is exactly what
-// caused the 405 in the first place.
+// GET takes the invite token (public invite page)
+// DELETE takes the invite id (revoke button)
+// both share [id] because next.js needs one segment name per folder
 
 export async function GET(
   request: Request,

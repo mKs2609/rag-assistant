@@ -4,10 +4,7 @@ import { processDocument } from '@/lib/documents/process'
 
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024
 
-// Chunking and embedding a large PDF takes far longer than a normal request
-// should, and it runs in `after()` below — which shares this route's budget.
-// Without an explicit ceiling the platform default is short enough to kill
-// processing partway through, leaving the document stuck on "processing".
+// processing runs in after() and needs time for large PDFs
 export const maxDuration = 60
 
 export async function POST(request: Request) {
@@ -35,9 +32,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'storagePath and filename are required' }, { status: 400 })
     }
 
-    // The file was already uploaded directly from the browser, so this
-    // path is client-supplied — confirm it genuinely sits inside the
-    // caller's own tenant folder before doing anything else with it.
+    // path comes from the client, make sure it's in the user's tenant folder
     if (!storagePath.startsWith(`${profile.tenant_id}/`)) {
       return NextResponse.json({ error: 'Invalid storage path' }, { status: 403 })
     }
@@ -59,9 +54,7 @@ export async function POST(request: Request) {
       )
     }
 
-    // Re-check the real size of the object server-side. The browser
-    // already checked before uploading, but that check is easy to bypass
-    // — this is the real enforcement point, not just a courtesy.
+    // check the real file size, the client-side check can be bypassed
     const folderPath = storagePath.split('/').slice(0, -1).join('/')
     const objectName = storagePath.split('/').pop()!
     const { data: listing } = await supabase.storage
@@ -99,9 +92,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: dbError.message }, { status: 500 })
     }
 
-    // Don't make the browser wait on extraction and embedding. The row is
-    // already saved as "processing", so the UI can show it immediately and
-    // poll until this finishes and flips it to "ready" or "failed".
+    // process in the background, the UI polls for the status
     after(() => processDocument(document.id))
 
     return NextResponse.json({ success: true, documentId: document.id })

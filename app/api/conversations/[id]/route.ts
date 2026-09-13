@@ -78,8 +78,7 @@ export async function PATCH(
       current = current.filter((docId) => !removeDocumentIds.includes(docId))
     }
 
-    // Empty array here would mean "search zero documents" downstream —
-    // null is what actually means unscoped, so convert back explicitly.
+    // empty array would search nothing, null means all documents
     updates.document_ids = current.length > 0 ? current : null
   }
 

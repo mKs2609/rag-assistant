@@ -2,9 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 
-// The Web Speech API for voice input isn't part of TypeScript's standard
-// DOM types, so these are minimal shapes covering just what this hook
-// actually uses.
+// speech recognition types aren't in the TS DOM lib
 interface SpeechRecognitionResult {
   transcript: string
 }

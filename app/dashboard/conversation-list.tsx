@@ -65,9 +65,7 @@ export default function ConversationList({
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
-    // capture: true catches scrolling inside nested containers too, since
-    // scroll events don't bubble normally — this stops a stale, misaligned
-    // menu from lingering if the list scrolls while it's open.
+    // capture so scrolling inside the list also closes the menu
     document.addEventListener('scroll', closeMenu, true)
     return () => {
       document.removeEventListener('mousedown', handleClickOutside)

@@ -18,8 +18,7 @@ export async function createClient() {
               cookieStore.set(name, value, options)
             )
           } catch {
-            // Called from a Server Component — middleware handles the
-            // actual session refresh, so this can be safely ignored here.
+            // ignore when called from a server component, proxy refreshes the session
           }
         },
       },

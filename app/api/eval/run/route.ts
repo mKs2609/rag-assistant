@@ -33,13 +33,13 @@ export async function POST(request: Request) {
   const { data: profile } = await supabase.from('profiles').select('tenant_id').eq('id', user.id).single()
   if (!profile) return NextResponse.json({ error: 'Profile not found' }, { status: 404 })
 
-  // Optional: run just one specific question instead of the whole set.
+  // optionally run a single question
   let questionId: string | undefined
   try {
     const body = await request.json()
     questionId = body?.questionId
   } catch {
-    // No body provided — run every question, same as before.
+    // no body, run all questions
   }
 
   let query = supabase
@@ -65,9 +65,7 @@ export async function POST(request: Request) {
 
   for (let i = 0; i < questions.length; i++) {
     const q = questions[i]
-    // Space out requests to Voyage — free-tier accounts without a payment
-    // method have a very tight per-minute limit, and running several
-    // questions back-to-back is exactly the kind of burst that trips it.
+    // avoid voyage free tier rate limit
     if (i > 0) {
       await sleep(1200)
     }

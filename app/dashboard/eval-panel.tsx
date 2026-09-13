@@ -80,10 +80,7 @@ export default function EvalPanel({ documents }: { documents: Document[] }) {
       body: JSON.stringify({
         question: newQuestion,
         expectedDocumentId: newDocId || null,
-        // Split on commas AND whitespace, so "march 2026" behaves the
-        // same as "march, 2026" — previously, a phrase typed without a
-        // comma was treated as one single unmatchable keyword, which
-        // silently failed every check that used it.
+        // split on commas and spaces
         expectedKeywords: newKeywords
           .split(',')
           .flatMap((segment) => segment.trim().split(/\s+/))
@@ -180,7 +177,7 @@ export default function EvalPanel({ documents }: { documents: Document[] }) {
       <div>
         <h2 className="font-display text-2xl text-bone mb-1">Evaluation</h2>
         <p className="text-sm text-bone/70">
-          Test retrieval and answer quality against known question/answer pairs — not just a manual spot-check.
+          Test retrieval and answer quality against known question/answer pairs.
         </p>
       </div>
 
@@ -212,7 +209,7 @@ export default function EvalPanel({ documents }: { documents: Document[] }) {
             className="w-full border border-slate bg-carbon text-bone placeholder:text-bone/70 rounded px-3 py-2 text-sm"
           />
           <p className="text-xs text-bone/70 mt-1">
-            Each word is checked individually against the answer — commas are optional.
+            Each word is checked individually against the answer, commas are optional.
           </p>
         </div>
         <button
@@ -241,7 +238,7 @@ export default function EvalPanel({ documents }: { documents: Document[] }) {
 
         {loadingQuestions && <p className="text-sm text-bone/70">Loading…</p>}
         {!loadingQuestions && questions.length === 0 && (
-          <p className="text-sm text-bone/70">No test questions yet — add one above to get started.</p>
+          <p className="text-sm text-bone/70">No test questions yet. Add one above to get started.</p>
         )}
 
         <ul className="space-y-1">

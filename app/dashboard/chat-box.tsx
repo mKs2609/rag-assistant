@@ -31,9 +31,7 @@ interface ScopedDocument {
   filename: string
 }
 
-// Gemini's answers use plain markdown — mainly **bold** for emphasis and
-// "* " for bullet points — but the chat only ever rendered raw text, so
-// those asterisks showed up literally instead of as real formatting.
+// render **bold** and "* " bullets from gemini's markdown
 function renderFormattedText(text: string) {
   return text.split('\n').map((line, i) => {
     const bulletMatch = line.match(/^\s*\*\s+(.*)/)
@@ -54,9 +52,7 @@ function renderFormattedText(text: string) {
   })
 }
 
-// A separate, plainer version just for text-to-speech — hearing "asterisk
-// asterisk" or "bracket one" spoken aloud would be worse than the
-// original visual glitch this is fixing.
+// strip markdown and [1] citations before reading aloud
 function stripMarkdownForSpeech(text: string): string {
   return text
     .replace(/\*\*(.+?)\*\*/g, '$1')
@@ -143,9 +139,6 @@ export default function ChatBox({
         return
       }
       setMessagesLoading(true)
-      // Pull the stored sources back too — without them, reopening a
-      // conversation showed the answers with every citation card and
-      // verification badge stripped off.
       const { data } = await supabase
         .from('messages')
         .select('role, content, sources')
@@ -269,7 +262,7 @@ export default function ChatBox({
         }
       }
     } catch (err) {
-      setError('Network error — the request failed to complete. Please try again.')
+      setError('Network error, the request failed to complete. Please try again.')
     } finally {
       setLoading(false)
     }
@@ -410,7 +403,7 @@ export default function ChatBox({
                             <span className="text-slate" title="This citation matches its source">✓ verified</span>
                           )}
                           {s.verified === false && (
-                            <span className="text-red-400" title="This citation's wording doesn't clearly match its source — worth double-checking">
+                            <span className="text-red-400" title="This citation's wording doesn't clearly match its source, worth double-checking">
                               ⚠ unverified
                             </span>
                           )}

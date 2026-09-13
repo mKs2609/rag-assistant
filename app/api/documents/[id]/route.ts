@@ -13,8 +13,7 @@ export async function DELETE(
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
   }
 
-  // RLS ensures this only finds the document if it belongs to the
-  // caller's own tenant — a stranger's document ID just returns nothing.
+  // RLS only returns documents from the user's tenant
   const { data: document, error: fetchError } = await supabase
     .from('documents')
     .select('id, storage_path')
@@ -33,7 +32,7 @@ export async function DELETE(
     return NextResponse.json({ error: storageError.message }, { status: 500 })
   }
 
-  // Cascade delete in the schema handles document_chunks automatically.
+  // chunks are removed by cascade
   const { error: deleteError } = await supabase
     .from('documents')
     .delete()

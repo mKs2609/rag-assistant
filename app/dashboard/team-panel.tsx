@@ -45,9 +45,7 @@ export default function TeamPanel({
   const [error, setError] = useState('')
   const [copiedToken, setCopiedToken] = useState<string | null>(null)
 
-  // A single open-menu id covers every row-level "⋯" menu on this page —
-  // the workspace title uses the id 'workspace', each member row uses its
-  // own member id. Only one can ever be open at a time.
+  // one open menu at a time: 'workspace' or a member id
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
 
   const [editingWorkspaceName, setEditingWorkspaceName] = useState(false)
@@ -435,7 +433,7 @@ export default function TeamPanel({
                 </ul>
               )}
               <p className="text-xs text-bone/50">
-                Each link works once and expires after 7 days. Share it directly with the person you&apos;re inviting — anyone who has the link can use it, so treat it like a password.
+                Each link works once and expires after 7 days. Share it directly with the person you&apos;re inviting. Anyone who has the link can use it, so treat it like a password.
               </p>
             </div>
           )}

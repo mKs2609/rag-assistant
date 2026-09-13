@@ -22,9 +22,7 @@ const statusLabel: Record<string, string> = {
 }
 
 const POLL_INTERVAL_MS = 3000
-// Roughly three minutes of polling. Processing is capped server-side, so a
-// document that hasn't resolved by now isn't going to — stop rather than
-// refreshing against a dead row forever.
+// stop polling after ~3 minutes
 const MAX_POLLS = 60
 
 export default function DocumentList({ documents }: { documents: Document[] }) {
@@ -32,9 +30,7 @@ export default function DocumentList({ documents }: { documents: Document[] }) {
   const [error, setError] = useState('')
   const router = useRouter()
 
-  // Extraction and embedding now finish after the upload response returns,
-  // so the row lands as "processing" and nothing would ever update it
-  // without asking the server again.
+  // refresh while any document is still processing
   const hasProcessing = documents.some((d) => d.status === 'processing')
   const pollCount = useRef(0)
 

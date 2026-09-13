@@ -1,10 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { extractText as extractPdfText, getDocumentProxy } from 'unpdf'
 
-// Voyage caps a single embeddings request at 1000 inputs and a total token
-// budget per request. A large PDF easily produces more chunks than that, so
-// every request has to be split — sending the whole document at once fails
-// outright once a file gets big enough.
+// voyage limits inputs and tokens per request, so embed in batches
 const EMBED_BATCH_SIZE = 128
 const EMBED_BATCH_CHAR_BUDGET = 400_000
 const INSERT_BATCH_SIZE = 200
@@ -36,8 +33,6 @@ async function extractText(buffer: Buffer, filename: string): Promise<string> {
   throw new Error(`Unsupported file type: .${ext}. Supported: .pdf, .txt, .md`)
 }
 
-// Group chunks so that no single request exceeds either the input-count cap
-// or a conservative character budget standing in for Voyage's token limit.
 function batchChunks(chunks: string[]): string[][] {
   const batches: string[][] = []
   let current: string[] = []
@@ -82,10 +77,7 @@ async function embedBatch(texts: string[], attempt = 1): Promise<number[][]> {
 
   if (!res.ok) {
     const errText = await res.text()
-    // Splitting a document into several requests makes hitting the
-    // per-minute rate limit far more likely than it was with one request,
-    // so a throttled or transient failure is worth retrying rather than
-    // failing the whole document.
+    // retry on rate limit / server errors
     const isRetryable = res.status === 429 || res.status >= 500
     if (isRetryable && attempt < 4) {
       await sleep(attempt * 2000)
@@ -114,8 +106,7 @@ async function getEmbeddings(texts: string[]): Promise<number[][]> {
   return embeddings
 }
 
-// Runs the whole pipeline for one document: download → extract text →
-// chunk → embed each chunk → store → flip status to ready (or failed).
+// download -> extract -> chunk -> embed -> store -> mark ready/failed
 export async function processDocument(documentId: string) {
   const admin = createAdminClient()
 
@@ -157,8 +148,6 @@ export async function processDocument(documentId: string) {
       chunk_index: i,
     }))
 
-    // A few thousand rows carrying full embedding vectors is a large enough
-    // payload to be worth splitting on the way in too.
     for (let i = 0; i < rows.length; i += INSERT_BATCH_SIZE) {
       const { error: insertError } = await admin
         .from('document_chunks')

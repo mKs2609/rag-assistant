@@ -35,10 +35,8 @@ export async function DELETE(
     return NextResponse.json({ error: 'Cannot remove the workspace owner' }, { status: 400 })
   }
 
-  // Deleting the auth user is the real removal — this schema ties every
-  // account to exactly one workspace, so there's no valid "member with no
-  // workspace" state to leave someone in otherwise. Your profiles table
-  // already cascade-deletes when the auth user is removed.
+  // each account belongs to one workspace, so removing a member deletes the user
+  // (profile is removed by cascade)
   const admin = createAdminClient()
   const { error } = await admin.auth.admin.deleteUser(id)
 

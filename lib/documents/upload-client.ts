@@ -6,14 +6,8 @@ export interface UploadResult {
   documentId: string
 }
 
-// Uploads a file directly from the browser to Supabase Storage, bypassing
-// our own API route entirely for the file bytes. This exists specifically
-// because Vercel's serverless functions have a hard 4.5MB request-body
-// limit that no application-level config can override — routing large
-// files through our own route would always fail in production regardless
-// of any size cap we set ourselves. Only a small JSON metadata payload
-// goes through our route afterward, to create the database row and
-// trigger the chunking/embedding pipeline.
+// upload straight to supabase storage, vercel functions have a 4.5MB body limit
+// then /api/documents/finalize creates the row and starts processing
 export async function uploadDocumentDirect(
   file: File,
   tenantId: string
@@ -48,8 +42,7 @@ export async function uploadDocumentDirect(
     } catch {
       message = 'Upload failed unexpectedly.'
     }
-    // Clean up the orphaned file — it made it to storage, but the metadata
-    // step that would have made it a real document failed.
+    // remove the uploaded file if finalize failed
     await supabase.storage.from('documents').remove([storagePath])
     throw new Error(message)
   }

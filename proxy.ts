@@ -27,8 +27,7 @@ export async function proxy(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  // Protect specific routes — no valid session means straight to /login,
-  // never reaching the page or its data at all.
+  // redirect to login if not signed in
   const protectedPaths = ['/dashboard']
   const isProtected = protectedPaths.some((path) => request.nextUrl.pathname.startsWith(path))
 
