@@ -23,7 +23,7 @@ export default async function DashboardPage() {
 
   return (
     <DashboardShell
-      workspaceName={(profile?.tenants as any)?.name ?? 'Your workspace'}
+      workspaceName={(profile?.tenants as unknown as { name: string } | null)?.name ?? 'Your workspace'}
       documents={documents ?? []}
       tenantId={profile?.tenant_id ?? ''}
       currentUserRole={profile?.role ?? 'member'}

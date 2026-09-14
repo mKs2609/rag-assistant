@@ -30,7 +30,7 @@ export async function GET(
   }
 
   return NextResponse.json({
-    workspaceName: (invite.tenants as any)?.name ?? 'a workspace',
+    workspaceName: (invite.tenants as unknown as { name: string } | null)?.name ?? 'a workspace',
     role: invite.role,
   })
 }

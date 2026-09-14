@@ -25,6 +25,38 @@ function friendlyName(member: { display_name: string | null; email: string }): s
   return localPart.split('+')[0] ?? localPart
 }
 
+interface TeamData {
+  members: Member[] | null
+  invites: Invite[] | null
+  error: string
+}
+
+async function requestTeamData(includeInvites: boolean): Promise<TeamData> {
+  const result: TeamData = { members: null, invites: null, error: '' }
+
+  const memberRes = await fetch('/api/team')
+  if (memberRes.ok) {
+    const data = await memberRes.json()
+    result.members = data.members ?? []
+  } else {
+    const data = await memberRes.json().catch(() => ({}))
+    result.error = data.error ?? `Could not load team members (status ${memberRes.status}).`
+  }
+
+  if (includeInvites) {
+    const inviteRes = await fetch('/api/invites')
+    if (inviteRes.ok) {
+      const data = await inviteRes.json()
+      result.invites = data.invites ?? []
+    } else {
+      const data = await inviteRes.json().catch(() => ({}))
+      result.error = result.error || data.error || `Could not load invites (status ${inviteRes.status}).`
+    }
+  }
+
+  return result
+}
+
 export default function TeamPanel({
   currentUserId,
   currentUserRole,
@@ -71,34 +103,27 @@ export default function TeamPanel({
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  async function loadAll() {
-    setLoading(true)
-    setError('')
-
-    const memberRes = await fetch('/api/team')
-    if (memberRes.ok) {
-      const data = await memberRes.json()
-      setMembers(data.members ?? [])
-    } else {
-      const data = await memberRes.json().catch(() => ({}))
-      setError(data.error ?? `Could not load team members (status ${memberRes.status}).`)
-    }
-
-    if (canManageInvites) {
-      const inviteRes = await fetch('/api/invites')
-      if (inviteRes.ok) {
-        const data = await inviteRes.json()
-        setInvites(data.invites ?? [])
-      } else {
-        const data = await inviteRes.json().catch(() => ({}))
-        setError((prev) => prev || data.error || `Could not load invites (status ${inviteRes.status}).`)
-      }
-    }
+  function applyTeamData(result: TeamData) {
+    if (result.members) setMembers(result.members)
+    if (result.invites) setInvites(result.invites)
+    setError(result.error)
     setLoading(false)
   }
 
+  function loadAll() {
+    setLoading(true)
+    setError('')
+    return requestTeamData(canManageInvites).then(applyTeamData)
+  }
+
   useEffect(() => {
-    loadAll()
+    let cancelled = false
+    requestTeamData(canManageInvites).then((result) => {
+      if (!cancelled) applyTeamData(result)
+    })
+    return () => {
+      cancelled = true
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 

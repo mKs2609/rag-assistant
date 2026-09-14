@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 
 interface Document {
   id: string
@@ -25,6 +25,13 @@ interface EvalResult {
   keywordsFound?: string[]
   keywordsExpected?: string[]
   error?: string
+}
+
+async function requestQuestions(): Promise<EvalQuestion[] | null> {
+  const res = await fetch('/api/eval/questions')
+  if (!res.ok) return null
+  const data = await res.json()
+  return data.questions ?? []
 }
 
 export default function EvalPanel({ documents }: { documents: Document[] }) {
@@ -53,18 +60,24 @@ export default function EvalPanel({ documents }: { documents: Document[] }) {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  async function loadQuestions() {
-    setLoadingQuestions(true)
-    const res = await fetch('/api/eval/questions')
-    if (res.ok) {
-      const data = await res.json()
-      setQuestions(data.questions ?? [])
-    }
+  function applyQuestions(list: EvalQuestion[] | null) {
+    if (list) setQuestions(list)
     setLoadingQuestions(false)
   }
 
+  function loadQuestions() {
+    setLoadingQuestions(true)
+    return requestQuestions().then(applyQuestions)
+  }
+
   useEffect(() => {
-    loadQuestions()
+    let cancelled = false
+    requestQuestions().then((list) => {
+      if (!cancelled) applyQuestions(list)
+    })
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   async function handleAddQuestion(e: React.FormEvent) {

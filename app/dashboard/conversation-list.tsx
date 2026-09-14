@@ -52,7 +52,7 @@ export default function ConversationList({
     return () => {
       cancelled = true
     }
-  }, [activeConversationId])
+  }, [activeConversationId, supabase])
 
   useEffect(() => {
     function closeMenu() {

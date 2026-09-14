@@ -201,7 +201,7 @@ export default function Strands({
   style = undefined
 }) {
   const propsRef = useRef({});
-  propsRef.current = {
+  const latestProps = {
     colors,
     count,
     speed,
@@ -221,6 +221,11 @@ export default function Strands({
     dispersion,
     glassSize
   };
+
+  // update after render, the animation loop reads the latest values
+  useEffect(() => {
+    propsRef.current = latestProps;
+  });
 
   const ctnDom = useRef(null);
 

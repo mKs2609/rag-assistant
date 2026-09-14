@@ -20,6 +20,11 @@ interface Message {
   sources?: Source[]
 }
 
+type StreamEvent =
+  | { type: 'token'; text: string }
+  | { type: 'done'; conversationId: string; sources: Source[] }
+  | { type: 'error'; error?: string }
+
 interface Document {
   id: string
   filename: string
@@ -89,8 +94,8 @@ export default function ChatBox({
   const router = useRouter()
   const bottomRef = useRef<HTMLDivElement>(null)
 
-  const { isListening, transcript, isSupported: micSupported, startListening, stopListening } =
-    useSpeechRecognition()
+  const { isListening, isSupported: micSupported, startListening, stopListening } =
+    useSpeechRecognition(setInput)
   const { speak, stop: stopSpeaking, speakingId, isSupported: speechSupported } = useSpeechSynthesis()
 
   function handleExport() {
@@ -160,22 +165,17 @@ export default function ChatBox({
     return () => {
       cancelled = true
     }
-  }, [activeConversationId])
+  }, [activeConversationId, supabase])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, loading])
 
-  useEffect(() => {
-    if (isListening) {
-      setInput(transcript)
-    }
-  }, [transcript, isListening])
-
   function toggleMic() {
     if (isListening) {
       stopListening()
     } else {
+      setInput('')
       startListening()
     }
   }
@@ -233,7 +233,7 @@ export default function ChatBox({
 
         for (const line of lines) {
           if (!line.trim()) continue
-          let event: any
+          let event: StreamEvent
           try {
             event = JSON.parse(line)
           } catch {
@@ -241,18 +241,20 @@ export default function ChatBox({
           }
 
           if (event.type === 'token') {
+            const text = event.text
             setMessages((prev) => {
               const copy = [...prev]
               const last = copy[copy.length - 1]
-              copy[copy.length - 1] = { ...last, content: last.content + event.text }
+              copy[copy.length - 1] = { ...last, content: last.content + text }
               return copy
             })
           } else if (event.type === 'done') {
+            const sources = event.sources
             onConversationChange(event.conversationId)
             setMessages((prev) => {
               const copy = [...prev]
               const last = copy[copy.length - 1]
-              copy[copy.length - 1] = { ...last, sources: event.sources }
+              copy[copy.length - 1] = { ...last, sources }
               return copy
             })
           } else if (event.type === 'error') {
@@ -261,7 +263,7 @@ export default function ChatBox({
           }
         }
       }
-    } catch (err) {
+    } catch {
       setError('Network error, the request failed to complete. Please try again.')
     } finally {
       setLoading(false)

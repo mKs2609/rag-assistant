@@ -78,13 +78,14 @@ export async function POST(request: Request) {
         filter_document_ids: null,
       })
 
-      const retrievedDocIds = (matches ?? []).map((m: any) => m.document_id)
+      const chunks = (matches ?? []) as { document_id: string; content: string }[]
+      const retrievedDocIds = chunks.map((m) => m.document_id)
       const retrievalHit = q.expected_document_id
         ? retrievedDocIds.includes(q.expected_document_id)
         : true
 
-      const context = (matches ?? [])
-        .map((m: any, i: number) => `[${i + 1}] ${m.content}`)
+      const context = chunks
+        .map((m, i) => `[${i + 1}] ${m.content}`)
         .join('\n\n')
 
       const geminiRes = await fetch(

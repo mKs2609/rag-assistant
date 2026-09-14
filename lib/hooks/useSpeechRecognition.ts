@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useSyncExternalStore } from 'react'
 
 // speech recognition types aren't in the TS DOM lib
 interface SpeechRecognitionResult {
@@ -22,24 +22,35 @@ interface SpeechRecognitionInstance extends EventTarget {
   onerror: ((event: SpeechRecognitionErrorEvent) => void) | null
   onend: (() => void) | null
 }
+type SpeechRecognitionCtor = new () => SpeechRecognitionInstance
 
-export function useSpeechRecognition() {
+function getRecognitionCtor(): SpeechRecognitionCtor | undefined {
+  const w = window as unknown as {
+    SpeechRecognition?: SpeechRecognitionCtor
+    webkitSpeechRecognition?: SpeechRecognitionCtor
+  }
+  return w.SpeechRecognition || w.webkitSpeechRecognition
+}
+
+const noopSubscribe = () => () => {}
+
+export function useSpeechRecognition(onTranscript?: (text: string) => void) {
   const [isListening, setIsListening] = useState(false)
-  const [transcript, setTranscript] = useState('')
-  const [isSupported, setIsSupported] = useState(false)
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null)
+  const onTranscriptRef = useRef(onTranscript)
+
+  // false on the server, real value in the browser
+  const isSupported = useSyncExternalStore(noopSubscribe, () => !!getRecognitionCtor(), () => false)
 
   useEffect(() => {
-    const SpeechRecognitionCtor =
-      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+    onTranscriptRef.current = onTranscript
+  }, [onTranscript])
 
-    if (!SpeechRecognitionCtor) {
-      setIsSupported(false)
-      return
-    }
-    setIsSupported(true)
+  useEffect(() => {
+    const Ctor = getRecognitionCtor()
+    if (!Ctor) return
 
-    const recognition: SpeechRecognitionInstance = new SpeechRecognitionCtor()
+    const recognition = new Ctor()
     recognition.continuous = false
     recognition.interimResults = true
     recognition.lang = 'en-US'
@@ -49,7 +60,7 @@ export function useSpeechRecognition() {
       for (let i = 0; i < event.results.length; i++) {
         text += event.results[i][0].transcript
       }
-      setTranscript(text)
+      onTranscriptRef.current?.(text)
     }
 
     recognition.onerror = () => {
@@ -69,7 +80,6 @@ export function useSpeechRecognition() {
 
   const startListening = useCallback(() => {
     if (!recognitionRef.current) return
-    setTranscript('')
     setIsListening(true)
     recognitionRef.current.start()
   }, [])
@@ -80,5 +90,5 @@ export function useSpeechRecognition() {
     setIsListening(false)
   }, [])
 
-  return { isListening, transcript, isSupported, startListening, stopListening }
+  return { isListening, isSupported, startListening, stopListening }
 }

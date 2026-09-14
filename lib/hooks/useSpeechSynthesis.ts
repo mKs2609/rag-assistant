@@ -1,14 +1,14 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useSyncExternalStore } from 'react'
+
+const noopSubscribe = () => () => {}
 
 export function useSpeechSynthesis() {
-  const [isSupported, setIsSupported] = useState(false)
   const [speakingId, setSpeakingId] = useState<string | null>(null)
 
-  useEffect(() => {
-    setIsSupported(typeof window !== 'undefined' && 'speechSynthesis' in window)
-  }, [])
+  // false on the server, real value in the browser
+  const isSupported = useSyncExternalStore(noopSubscribe, () => 'speechSynthesis' in window, () => false)
 
   const speak = useCallback(
     (text: string, id: string) => {
