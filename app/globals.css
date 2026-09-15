@@ -1,15 +1,7 @@
 @import "tailwindcss";
 
 @theme {
-  --color-bg: #faf6ef;
-  --color-surface: #ffffff;
-  --color-surface-muted: #f1ece1;
-  --color-border: #e3dccb;
-  --color-text: #2b2013;
-  --color-text-muted: #8a8072;
-  --color-source: #a8622e;
-  --color-source-dim: #c99968;
-  --color-signal: #2f5d62;
+  --color-accent: #c99a5b;
   --color-obsidian: #101010;
   --color-graphite: #495764;
   --color-bone: #fffdf9;
@@ -32,8 +24,8 @@ html, body {
 }
 
 body {
-  background: var(--color-bg);
-  color: var(--color-text);
+  background: var(--color-obsidian);
+  color: var(--color-bone);
   font-family: var(--font-body);
   letter-spacing: -0.01em;
 }
@@ -45,8 +37,8 @@ h1, h2, h3 {
 }
 
 ::selection {
-  background: var(--color-source);
-  color: var(--color-surface);
+  background: var(--color-accent);
+  color: var(--color-obsidian);
 }
 @keyframes message-in {
   from {
