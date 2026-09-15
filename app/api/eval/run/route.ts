@@ -1,5 +1,9 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
+
+const EVAL_RATE_LIMIT_MAX = 5
+const EVAL_RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000
 
 async function embedQuery(text: string): Promise<number[]> {
   const res = await fetch('https://api.voyageai.com/v1/embeddings', {
@@ -42,9 +46,25 @@ export async function POST(request: Request) {
     // no body, run all questions
   }
 
+  // each run calls voyage and gemini once per question
+  const { count: recentRuns } = await supabase
+    .from('audit_logs')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', user.id)
+    .eq('action', 'eval_run')
+    .gte('created_at', new Date(Date.now() - EVAL_RATE_LIMIT_WINDOW_MS).toISOString())
+
+  if ((recentRuns ?? 0) >= EVAL_RATE_LIMIT_MAX) {
+    return NextResponse.json(
+      { error: `Rate limit exceeded. You can run up to ${EVAL_RATE_LIMIT_MAX} evaluations every 10 minutes.` },
+      { status: 429 }
+    )
+  }
+
   let query = supabase
     .from('eval_questions')
     .select('id, question, expected_document_id, expected_keywords')
+    .eq('tenant_id', profile.tenant_id)
     .order('created_at', { ascending: true })
 
   if (questionId) {
@@ -55,6 +75,19 @@ export async function POST(request: Request) {
 
   if (!questions || questions.length === 0) {
     return NextResponse.json({ error: 'No evaluation questions yet. Add some first.' }, { status: 400 })
+  }
+
+  // users can't write audit_logs, so log the run with the service role
+  const { error: logError } = await createAdminClient().from('audit_logs').insert({
+    tenant_id: profile.tenant_id,
+    user_id: user.id,
+    action: 'eval_run',
+    metadata: { question_count: questions.length, question_id: questionId ?? null },
+  })
+
+  if (logError) {
+    console.error('Failed to record eval run:', logError.message)
+    return NextResponse.json({ error: 'Could not start the evaluation. Please try again.' }, { status: 500 })
   }
 
   function sleep(ms: number) {

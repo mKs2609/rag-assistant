@@ -9,6 +9,7 @@ interface Conversation {
   title: string | null
   created_at: string
   pinned: boolean
+  user_id: string | null
 }
 
 const MENU_WIDTH = 144
@@ -17,9 +18,13 @@ const MENU_HEIGHT = 130
 export default function ConversationList({
   activeConversationId,
   onSelect,
+  currentUserId,
+  currentUserRole,
 }: {
   activeConversationId: string | null
   onSelect: (id: string | null) => void
+  currentUserId: string
+  currentUserRole: string
 }) {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [loading, setLoading] = useState(true)
@@ -37,7 +42,7 @@ export default function ConversationList({
     async function loadConversations() {
       const { data } = await supabase
         .from('conversations')
-        .select('id, title, created_at, pinned')
+        .select('id, title, created_at, pinned, user_id')
         .order('pinned', { ascending: false })
         .order('created_at', { ascending: false })
         .limit(20)
@@ -158,6 +163,11 @@ export default function ConversationList({
   if (loading) return <p className="text-xs text-bone/50 px-1">Loading…</p>
   if (conversations.length === 0) return <p className="text-xs text-bone/50 px-1">No conversations yet.</p>
 
+  // same rule as the API: creator, owner or admin
+  function canManage(c: Conversation) {
+    return c.user_id === currentUserId || currentUserRole === 'owner' || currentUserRole === 'admin'
+  }
+
   const pinned = conversations.filter((c) => c.pinned)
   const unpinned = conversations.filter((c) => !c.pinned)
   const openConvo = conversations.find((c) => c.id === openMenuId)
@@ -195,19 +205,21 @@ export default function ConversationList({
           </span>
         )}
 
-        <button
-          ref={(el) => {
-            if (el) buttonRefs.current.set(c.id, el)
-          }}
-          onClick={(e) => {
-            e.stopPropagation()
-            handleToggleMenu(c.id)
-          }}
-          className="shrink-0 text-bone/50 hover:text-bone px-1"
-          aria-label="Conversation options"
-        >
-          ⋯
-        </button>
+        {canManage(c) && (
+          <button
+            ref={(el) => {
+              if (el) buttonRefs.current.set(c.id, el)
+            }}
+            onClick={(e) => {
+              e.stopPropagation()
+              handleToggleMenu(c.id)
+            }}
+            className="shrink-0 text-bone/50 hover:text-bone px-1"
+            aria-label="Conversation options"
+          >
+            ⋯
+          </button>
+        )}
       </li>
     )
   }

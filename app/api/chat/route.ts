@@ -72,11 +72,12 @@ export async function POST(request: Request) {
   const RATE_LIMIT_MAX = 15
   const RATE_LIMIT_WINDOW_MS = 5 * 60 * 1000
 
+  // counted by sender, conversations are shared so the creator isn't enough
   const { count: recentCount } = await supabase
     .from('messages')
-    .select('id, conversations!inner(user_id)', { count: 'exact', head: true })
+    .select('id', { count: 'exact', head: true })
     .eq('role', 'user')
-    .eq('conversations.user_id', user.id)
+    .eq('user_id', user.id)
     .gte('created_at', new Date(Date.now() - RATE_LIMIT_WINDOW_MS).toISOString())
 
   if ((recentCount ?? 0) >= RATE_LIMIT_MAX) {
@@ -100,6 +101,7 @@ export async function POST(request: Request) {
       .from('conversations')
       .select('id')
       .eq('id', convoId)
+      .eq('tenant_id', profile.tenant_id)
       .single()
     if (!convo) {
       return NextResponse.json({ error: 'Conversation not found' }, { status: 404 })
@@ -132,12 +134,18 @@ export async function POST(request: Request) {
     convoId = newConvo.id
   }
 
-  await supabase.from('messages').insert({
+  // if this isn't saved the rate limit can't count it, so stop here
+  const { error: userMessageError } = await supabase.from('messages').insert({
     tenant_id: profile.tenant_id,
     conversation_id: convoId,
+    user_id: user.id,
     role: 'user',
     content: message,
   })
+
+  if (userMessageError) {
+    return NextResponse.json({ error: 'Could not save your message' }, { status: 500 })
+  }
 
   let scopedDocumentIds: string[] | null = documentIds && documentIds.length > 0 ? documentIds : null
   if (conversationId && !scopedDocumentIds) {
@@ -145,6 +153,7 @@ export async function POST(request: Request) {
       .from('conversations')
       .select('document_ids')
       .eq('id', conversationId)
+      .eq('tenant_id', profile.tenant_id)
       .single()
     scopedDocumentIds = existingConvo?.document_ids ?? null
   }

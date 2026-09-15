@@ -29,6 +29,20 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Question is required' }, { status: 400 })
   }
 
+  // foreign keys skip RLS, so check the document is in this workspace
+  if (expectedDocumentId) {
+    const { data: doc } = await supabase
+      .from('documents')
+      .select('id')
+      .eq('id', expectedDocumentId)
+      .eq('tenant_id', profile.tenant_id)
+      .maybeSingle()
+
+    if (!doc) {
+      return NextResponse.json({ error: 'Expected document not found' }, { status: 400 })
+    }
+  }
+
   const keywords = Array.isArray(expectedKeywords)
     ? expectedKeywords.filter((k: unknown) => typeof k === 'string' && k.trim()).map((k: string) => k.trim())
     : []

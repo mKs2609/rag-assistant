@@ -16,6 +16,7 @@ export async function GET() {
   const { data, error } = await supabase
     .from('tenant_invites')
     .select('id, token, role, used_at, expires_at, created_at')
+    .eq('tenant_id', profile.tenant_id)
     .order('created_at', { ascending: false })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

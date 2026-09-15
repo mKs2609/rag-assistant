@@ -48,6 +48,21 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'This invite link has expired.' }, { status: 400 })
     }
 
+    // claim the invite first, so two signups with the same link can't both succeed
+    const { data: claimed } = await admin
+      .from('tenant_invites')
+      .update({ used_at: new Date().toISOString() })
+      .eq('id', invite.id)
+      .is('used_at', null)
+      .select('id')
+
+    if (!claimed || claimed.length === 0) {
+      return NextResponse.json({ error: 'This invite link has already been used.' }, { status: 400 })
+    }
+
+    const releaseInvite = () =>
+      admin.from('tenant_invites').update({ used_at: null }).eq('id', invite.id)
+
     const { data: authData, error: authError } = await admin.auth.admin.createUser({
       email,
       password,
@@ -55,6 +70,7 @@ export async function POST(request: Request) {
     })
 
     if (authError || !authData.user) {
+      await releaseInvite()
       const isDuplicateEmail = authError?.message?.toLowerCase().includes('already been registered')
       const message = isDuplicateEmail
         ? 'Could not create an account with these details. If you already have an account, try logging in instead.'
@@ -72,12 +88,13 @@ export async function POST(request: Request) {
 
     if (profileError) {
       await admin.auth.admin.deleteUser(authData.user.id)
+      await releaseInvite()
       return NextResponse.json({ error: profileError.message }, { status: 500 })
     }
 
     await admin
       .from('tenant_invites')
-      .update({ used_at: new Date().toISOString(), used_by: authData.user.id })
+      .update({ used_by: authData.user.id })
       .eq('id', invite.id)
 
     return NextResponse.json({ success: true, tenantId: invite.tenant_id })

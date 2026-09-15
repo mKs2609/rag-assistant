@@ -1,6 +1,33 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
+type SupabaseClient = Awaited<ReturnType<typeof createClient>>
+
+// conversations are shared in the workspace, but only the creator or an owner/admin can change them
+async function loadConversationAccess(supabase: SupabaseClient, userId: string, conversationId: string) {
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('tenant_id, role')
+    .eq('id', userId)
+    .single()
+
+  if (!profile) return null
+
+  const { data: conversation } = await supabase
+    .from('conversations')
+    .select('id, user_id, document_ids')
+    .eq('id', conversationId)
+    .eq('tenant_id', profile.tenant_id)
+    .single()
+
+  if (!conversation) return null
+
+  const canManage =
+    conversation.user_id === userId || profile.role === 'owner' || profile.role === 'admin'
+
+  return { tenantId: profile.tenant_id as string, conversation, canManage }
+}
+
 export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -13,10 +40,19 @@ export async function DELETE(
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
   }
 
+  const access = await loadConversationAccess(supabase, user.id, id)
+  if (!access) {
+    return NextResponse.json({ error: 'Conversation not found' }, { status: 404 })
+  }
+  if (!access.canManage) {
+    return NextResponse.json({ error: 'You can only delete your own conversations' }, { status: 403 })
+  }
+
   const { error } = await supabase
     .from('conversations')
     .delete()
     .eq('id', id)
+    .eq('tenant_id', access.tenantId)
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })
@@ -37,7 +73,16 @@ export async function PATCH(
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
   }
 
+  const access = await loadConversationAccess(supabase, user.id, id)
+  if (!access) {
+    return NextResponse.json({ error: 'Conversation not found' }, { status: 404 })
+  }
+
   const { title, pinned, addDocumentIds, removeDocumentIds } = await request.json()
+
+  if ((title !== undefined || pinned !== undefined) && !access.canManage) {
+    return NextResponse.json({ error: 'You can only rename or pin your own conversations' }, { status: 403 })
+  }
 
   const updates: { title?: string; pinned?: boolean; document_ids?: string[] | null } = {}
 
@@ -63,13 +108,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'removeDocumentIds must be an array of strings' }, { status: 400 })
     }
 
-    const { data: existing } = await supabase
-      .from('conversations')
-      .select('document_ids')
-      .eq('id', id)
-      .single()
-
-    let current: string[] = existing?.document_ids ?? []
+    let current: string[] = access.conversation.document_ids ?? []
 
     if (addDocumentIds) {
       current = Array.from(new Set([...current, ...addDocumentIds]))
@@ -90,6 +129,7 @@ export async function PATCH(
     .from('conversations')
     .update(updates)
     .eq('id', id)
+    .eq('tenant_id', access.tenantId)
     .select('document_ids')
     .single()
 

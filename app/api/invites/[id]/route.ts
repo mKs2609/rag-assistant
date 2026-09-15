@@ -45,14 +45,18 @@ export async function DELETE(
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
 
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+  const { data: profile } = await supabase.from('profiles').select('tenant_id, role').eq('id', user.id).single()
   if (!profile) return NextResponse.json({ error: 'Profile not found' }, { status: 404 })
 
   if (profile.role !== 'owner' && profile.role !== 'admin') {
     return NextResponse.json({ error: 'Only owners and admins can revoke invites' }, { status: 403 })
   }
 
-  const { error } = await supabase.from('tenant_invites').delete().eq('id', id)
+  const { error } = await supabase
+    .from('tenant_invites')
+    .delete()
+    .eq('id', id)
+    .eq('tenant_id', profile.tenant_id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ success: true })
 }

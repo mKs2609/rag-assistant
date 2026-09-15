@@ -185,6 +185,8 @@ export default function DashboardShell({
           <ConversationList
             activeConversationId={activeConversationId}
             onSelect={handleSelectConversation}
+            currentUserId={currentUserId}
+            currentUserRole={currentUserRole}
           />
         </div>
 
