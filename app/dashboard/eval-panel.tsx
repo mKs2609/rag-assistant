@@ -178,11 +178,14 @@ export default function EvalPanel({ documents }: { documents: Document[] }) {
     .map((q) => results[q.id])
     .filter((r): r is EvalResult => Boolean(r))
 
-  const retrievalScore = visibleResults.length
-    ? visibleResults.filter((r) => r.retrievalHit).length / visibleResults.length
+  // questions that errored (e.g. model busy) still show, but aren't scored
+  const scoredResults = visibleResults.filter((r) => !r.error)
+
+  const retrievalScore = scoredResults.length
+    ? scoredResults.filter((r) => r.retrievalHit).length / scoredResults.length
     : null
-  const answerScore = visibleResults.length
-    ? visibleResults.filter((r) => r.answerCorrect).length / visibleResults.length
+  const answerScore = scoredResults.length
+    ? scoredResults.filter((r) => r.answerCorrect).length / scoredResults.length
     : null
 
   return (

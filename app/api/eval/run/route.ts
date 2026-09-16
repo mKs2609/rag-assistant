@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { callGemini, geminiErrorMessage } from '@/lib/gemini'
 
 const EVAL_RATE_LIMIT_MAX = 5
 const EVAL_RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000
@@ -121,19 +122,18 @@ export async function POST(request: Request) {
         .map((m, i) => `[${i + 1}] ${m.content}`)
         .join('\n\n')
 
-      const geminiRes = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${process.env.GEMINI_API_KEY}`,
-        {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            systemInstruction: {
-              parts: [{ text: `Answer using only this reference material:\n${context}` }],
-            },
-            contents: [{ role: 'user', parts: [{ text: q.question }] }],
-          }),
-        }
-      )
+      const geminiRes = await callGemini('generateContent', {
+        systemInstruction: {
+          parts: [{ text: `Answer using only this reference material:\n${context}` }],
+        },
+        contents: [{ role: 'user', parts: [{ text: q.question }] }],
+      })
+
+      // a failed call used to score as a wrong answer
+      if (!geminiRes.ok) {
+        console.error(`Gemini error (${geminiRes.status}):`, await geminiRes.text())
+        throw new Error(geminiErrorMessage(geminiRes.status))
+      }
 
       const geminiData = await geminiRes.json()
       const answer: string = geminiData.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
@@ -165,8 +165,10 @@ export async function POST(request: Request) {
     }
   }
 
-  const retrievalScore = results.filter((r) => r.retrievalHit).length / results.length
-  const answerScore = results.filter((r) => r.answerCorrect).length / results.length
+  // skip questions that errored, they say nothing about retrieval or answer quality
+  const scored = results.filter((r) => !('error' in r))
+  const retrievalScore = scored.length ? scored.filter((r) => r.retrievalHit).length / scored.length : null
+  const answerScore = scored.length ? scored.filter((r) => r.answerCorrect).length / scored.length : null
 
   return NextResponse.json({ results, retrievalScore, answerScore })
 }

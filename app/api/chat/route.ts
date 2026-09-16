@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { callGemini, geminiErrorMessage } from '@/lib/gemini'
 
 async function embedQuery(text: string): Promise<number[]> {
   const res = await fetch('https://api.voyageai.com/v1/embeddings', {
@@ -233,21 +234,14 @@ ${context}`
       let fullText = ''
 
       try {
-        const geminiRes = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:streamGenerateContent?alt=sse&key=${process.env.GEMINI_API_KEY}`,
-          {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({
-              systemInstruction: { parts: [{ text: systemPrompt }] },
-              contents: geminiContents,
-            }),
-          }
-        )
+        const geminiRes = await callGemini('streamGenerateContent', {
+          systemInstruction: { parts: [{ text: systemPrompt }] },
+          contents: geminiContents,
+        })
 
         if (!geminiRes.ok || !geminiRes.body) {
-          const errText = await geminiRes.text()
-          send({ type: 'error', error: `Gemini API error: ${errText}` })
+          console.error(`Gemini error (${geminiRes.status}):`, await geminiRes.text())
+          send({ type: 'error', error: geminiErrorMessage(geminiRes.status) })
           controller.close()
           return
         }
