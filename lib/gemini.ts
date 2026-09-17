@@ -9,7 +9,8 @@ function sleep(ms: number) {
 // gemini often returns 503 when it's busy, usually gone after a second or two
 export async function callGemini(
   method: 'generateContent' | 'streamGenerateContent',
-  body: unknown
+  body: unknown,
+  onRetry?: (attempt: number) => void
 ): Promise<Response> {
   const query = method === 'streamGenerateContent' ? '?alt=sse' : ''
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:${method}${query}`
@@ -29,6 +30,7 @@ export async function callGemini(
     }
 
     await res.body?.cancel()
+    onRetry?.(attempt)
     await sleep(1000 * 2 ** (attempt - 1))
   }
 }

@@ -15,14 +15,24 @@ interface Source {
 }
 
 interface Message {
+  id?: string
+  userId?: string | null
   role: 'user' | 'assistant'
   content: string
   sources?: Source[]
+  status?: string
 }
 
 type StreamEvent =
+  | { type: 'status'; status: string }
   | { type: 'token'; text: string }
-  | { type: 'done'; conversationId: string; sources: Source[] }
+  | {
+      type: 'done'
+      conversationId: string
+      sources: Source[]
+      userMessageId: string
+      assistantMessageId: string | null
+    }
   | { type: 'error'; error?: string }
 
 interface Document {
@@ -74,6 +84,8 @@ export default function ChatBox({
   tenantId,
   onAttachDocument,
   onRemoveDocument,
+  currentUserId,
+  currentUserRole,
 }: {
   activeConversationId: string | null
   onConversationChange: (id: string) => void
@@ -83,6 +95,8 @@ export default function ChatBox({
   tenantId: string
   onAttachDocument: (id: string) => Promise<void>
   onRemoveDocument: (id: string) => Promise<void>
+  currentUserId: string
+  currentUserRole: string
 }) {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
@@ -90,6 +104,8 @@ export default function ChatBox({
   const [error, setError] = useState('')
   const [attaching, setAttaching] = useState(false)
   const [messagesLoading, setMessagesLoading] = useState(false)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
   const supabase = createClient()
   const router = useRouter()
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -146,12 +162,14 @@ export default function ChatBox({
       setMessagesLoading(true)
       const { data } = await supabase
         .from('messages')
-        .select('role, content, sources')
+        .select('id, user_id, role, content, sources')
         .eq('conversation_id', activeConversationId)
         .order('created_at', { ascending: true })
 
       if (!cancelled) {
         const restored: Message[] = (data ?? []).map((m) => ({
+          id: m.id as string,
+          userId: m.user_id as string | null,
           role: m.role as 'user' | 'assistant',
           content: m.content as string,
           sources: (m.sources as Source[] | null) ?? undefined,
@@ -190,9 +208,22 @@ export default function ChatBox({
 
     const userMessage = input
     setInput('')
-    setMessages((prev) => [...prev, { role: 'user', content: userMessage }])
+    // show the question and a status placeholder right away
+    setMessages((prev) => [
+      ...prev,
+      { role: 'user', content: userMessage, userId: currentUserId },
+      { role: 'assistant', content: '', status: 'Sending…' },
+    ])
     setLoading(true)
     setError('')
+    setConfirmDeleteId(null)
+
+    // nothing was saved (or the server removed it), take it out and give the text back
+    function dropPendingExchange(message: string) {
+      setMessages((prev) => prev.slice(0, -2))
+      setInput((current) => current || userMessage)
+      setError(message)
+    }
 
     try {
       const res = await fetch('/api/chat', {
@@ -206,18 +237,16 @@ export default function ChatBox({
       })
 
       if (!res.ok) {
-        const data = await res.json()
-        setError(data.error ?? 'Something went wrong')
+        const data = await res.json().catch(() => ({}))
+        dropPendingExchange(data.error ?? 'Something went wrong')
         return
       }
 
       if (!res.body) {
+        setMessages((prev) => prev.slice(0, -1))
         setError('No response received from the server.')
         return
       }
-
-      // Placeholder that grows in place as tokens arrive.
-      setMessages((prev) => [...prev, { role: 'assistant', content: '' }])
 
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
@@ -240,7 +269,14 @@ export default function ChatBox({
             continue
           }
 
-          if (event.type === 'token') {
+          if (event.type === 'status') {
+            const status = event.status
+            setMessages((prev) => {
+              const copy = [...prev]
+              copy[copy.length - 1] = { ...copy[copy.length - 1], status }
+              return copy
+            })
+          } else if (event.type === 'token') {
             const text = event.text
             setMessages((prev) => {
               const copy = [...prev]
@@ -249,25 +285,58 @@ export default function ChatBox({
               return copy
             })
           } else if (event.type === 'done') {
-            const sources = event.sources
+            const { sources, userMessageId, assistantMessageId } = event
             onConversationChange(event.conversationId)
             setMessages((prev) => {
               const copy = [...prev]
               const last = copy[copy.length - 1]
-              copy[copy.length - 1] = { ...last, sources }
+              copy[copy.length - 1] = {
+                ...last,
+                sources,
+                status: undefined,
+                id: assistantMessageId ?? undefined,
+                userId: currentUserId,
+              }
+              copy[copy.length - 2] = { ...copy[copy.length - 2], id: userMessageId }
               return copy
             })
           } else if (event.type === 'error') {
-            setMessages((prev) => prev.slice(0, -1))
-            setError(event.error ?? 'Something went wrong')
+            dropPendingExchange(event.error ?? 'Something went wrong')
           }
         }
       }
     } catch {
+      setMessages((prev) => prev.slice(0, -1))
       setError('Network error, the request failed to complete. Please try again.')
     } finally {
       setLoading(false)
     }
+  }
+
+  const isAdmin = currentUserRole === 'owner' || currentUserRole === 'admin'
+
+  // older messages have no sender, the server decides for those
+  function canDelete(m: Message) {
+    return m.role === 'user' && !!m.id && (isAdmin || !m.userId || m.userId === currentUserId)
+  }
+
+  async function handleDeleteMessage(id: string) {
+    setDeletingId(id)
+    setError('')
+    stopSpeaking()
+
+    const res = await fetch(`/api/messages/${id}`, { method: 'DELETE' })
+    const data = await res.json().catch(() => ({}))
+    setDeletingId(null)
+    setConfirmDeleteId(null)
+
+    if (!res.ok) {
+      setError(data.error ?? 'Could not delete the message')
+      return
+    }
+
+    const removed = new Set<string>(data.deletedIds ?? [id])
+    setMessages((prev) => prev.filter((m) => !m.id || !removed.has(m.id)))
   }
 
   async function handleUploadNew(file: File) {
@@ -355,7 +424,7 @@ export default function ChatBox({
           const isEmptyAssistantPlaceholder = m.role === 'assistant' && m.content === ''
 
           return (
-            <div key={i} className={(m.role === 'user' ? 'flex justify-end' : 'flex justify-start') + ' animate-message-in'}>
+            <div key={i} className={(m.role === 'user' ? 'flex justify-end' : 'flex justify-start') + ' animate-message-in group'}>
               <div className="max-w-[85%] sm:max-w-[70%]">
                 <div
                   className={
@@ -366,10 +435,13 @@ export default function ChatBox({
                   }
                 >
                   {isEmptyAssistantPlaceholder ? (
-                    <span className="flex gap-1 py-0.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-pewter animate-bounce [animation-delay:-0.3s]" />
-                      <span className="w-1.5 h-1.5 rounded-full bg-pewter animate-bounce [animation-delay:-0.15s]" />
-                      <span className="w-1.5 h-1.5 rounded-full bg-pewter animate-bounce" />
+                    <span className="flex items-center gap-2.5 py-0.5" role="status">
+                      <span className="flex gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-pewter animate-bounce [animation-delay:-0.3s]" />
+                        <span className="w-1.5 h-1.5 rounded-full bg-pewter animate-bounce [animation-delay:-0.15s]" />
+                        <span className="w-1.5 h-1.5 rounded-full bg-pewter animate-bounce" />
+                      </span>
+                      {m.status && <span className="text-sm text-pewter">{m.status}</span>}
                     </span>
                   ) : (
                     <span className="flex-1 whitespace-pre-wrap">{renderFormattedText(m.content)}</span>
@@ -394,6 +466,39 @@ export default function ChatBox({
                     </button>
                   )}
                 </div>
+                {canDelete(m) && !loading && (
+                  <div className="mt-1 flex justify-end gap-2 text-xs">
+                    {confirmDeleteId === m.id ? (
+                      <>
+                        <span className="text-pewter">Delete this question and its answer?</span>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteMessage(m.id!)}
+                          disabled={deletingId === m.id}
+                          className="text-red-400 hover:underline disabled:opacity-40"
+                        >
+                          {deletingId === m.id ? 'Deleting…' : 'Delete'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmDeleteId(null)}
+                          className="text-bone/70 hover:text-bone"
+                        >
+                          Cancel
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setConfirmDeleteId(m.id!)}
+                        className="text-pewter hover:text-red-400 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100 transition-opacity"
+                        aria-label="Delete this message"
+                      >
+                        Delete
+                      </button>
+                    )}
+                  </div>
+                )}
                 {m.sources && m.sources.length > 0 && (
                   <div className="mt-2 space-y-1.5">
                     {m.sources.map((s, j) => (

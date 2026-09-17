@@ -240,6 +240,8 @@ export default function DashboardShell({
               tenantId={tenantId}
               onAttachDocument={handleAttachDocument}
               onRemoveDocument={handleRemoveDocument}
+              currentUserId={currentUserId}
+              currentUserRole={currentUserRole}
             />
           )}
         </div>
