@@ -15,6 +15,7 @@ interface Document {
   id: string
   filename: string
   status: string
+  uploaded_by: string | null
 }
 
 export default function DashboardShell({
@@ -181,7 +182,7 @@ export default function DashboardShell({
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-4 sidebar-scroll">
+        <div className="flex-1 overflow-y-auto px-4 thin-scroll">
           <ConversationList
             activeConversationId={activeConversationId}
             onSelect={handleSelectConversation}
@@ -192,7 +193,11 @@ export default function DashboardShell({
 
         <div className="p-4 border-t border-ash space-y-3">
           <DocumentUpload tenantId={tenantId} />
-          <DocumentList documents={documents} />
+          <DocumentList
+            documents={documents}
+            currentUserId={currentUserId}
+            currentUserRole={currentUserRole}
+          />
         </div>
       </aside>
 

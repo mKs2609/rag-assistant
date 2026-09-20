@@ -400,7 +400,7 @@ export default function ChatBox({
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-10 space-y-6">
+      <div className="flex-1 overflow-y-auto thin-scroll px-4 sm:px-8 py-10 space-y-6">
         {messagesLoading && (
           <div className="h-full flex items-center justify-center">
             <div className="flex gap-1">

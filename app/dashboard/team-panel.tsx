@@ -244,7 +244,7 @@ export default function TeamPanel({
   const pendingInvites = invites.filter((inv) => !inv.used_at && new Date(inv.expires_at) > new Date())
 
   return (
-    <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-8 space-y-8">
+    <div className="flex-1 overflow-y-auto thin-scroll px-4 sm:px-8 py-8 space-y-8">
       <div className="space-y-1">
         {editingWorkspaceName ? (
           <div className="flex items-center gap-2">

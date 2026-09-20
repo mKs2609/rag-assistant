@@ -87,7 +87,7 @@ export default function AttachMenu({
       )}
 
       {open && showExisting && (
-        <div className="absolute bottom-full mb-2 left-0 w-64 bg-inkwell border border-ash rounded-lg shadow-[rgba(4,4,7,0.25)_0px_2px_4px_0px,rgba(4,4,7,0.4)_0px_8px_24px_0px] py-1 z-30 max-h-56 overflow-y-auto">
+        <div className="absolute bottom-full mb-2 left-0 w-64 bg-inkwell border border-ash rounded-lg shadow-[rgba(4,4,7,0.25)_0px_2px_4px_0px,rgba(4,4,7,0.4)_0px_8px_24px_0px] py-1 z-30 max-h-56 overflow-y-auto thin-scroll">
           {availableDocs.length === 0 ? (
             <p className="px-3 py-2 text-sm text-pewter">No other documents available.</p>
           ) : (

@@ -189,7 +189,7 @@ export default function EvalPanel({ documents }: { documents: Document[] }) {
     : null
 
   return (
-    <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-8 space-y-8">
+    <div className="flex-1 overflow-y-auto thin-scroll px-4 sm:px-8 py-8 space-y-8">
       <div>
         <h2 className="font-display text-2xl text-bone mb-1">Evaluation</h2>
         <p className="text-sm text-bone/70">

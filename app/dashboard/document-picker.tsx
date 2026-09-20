@@ -29,7 +29,7 @@ export default function DocumentPicker({
           Pick specific documents to focus this chat on, or leave none selected to search everything.
         </p>
 
-        <div className="space-y-1 max-h-64 overflow-y-auto rounded-lg bg-carbon p-2">
+        <div className="space-y-1 max-h-64 overflow-y-auto thin-scroll rounded-lg bg-carbon p-2">
           {readyDocs.length === 0 && (
             <p className="text-sm text-pewter p-2">No ready documents yet.</p>
           )}

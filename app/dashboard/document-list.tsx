@@ -7,6 +7,7 @@ interface Document {
   id: string
   filename: string
   status: string
+  uploaded_by: string | null
 }
 
 const statusColor: Record<string, string> = {
@@ -25,10 +26,24 @@ const POLL_INTERVAL_MS = 3000
 // stop polling after ~3 minutes
 const MAX_POLLS = 60
 
-export default function DocumentList({ documents }: { documents: Document[] }) {
+export default function DocumentList({
+  documents,
+  currentUserId,
+  currentUserRole,
+}: {
+  documents: Document[]
+  currentUserId: string
+  currentUserRole: string
+}) {
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [error, setError] = useState('')
   const router = useRouter()
+
+  // same rule as the API: uploader, owner or admin
+  const isAdmin = currentUserRole === 'owner' || currentUserRole === 'admin'
+  function canDelete(doc: Document) {
+    return isAdmin || doc.uploaded_by === currentUserId
+  }
 
   // refresh while any document is still processing
   const hasProcessing = documents.some((d) => d.status === 'processing')
@@ -73,7 +88,7 @@ export default function DocumentList({ documents }: { documents: Document[] }) {
       <p className="text-xs font-bold text-bone uppercase tracking-wider">Documents</p>
       {error && <p className="text-red-400 text-xs">{error}</p>}
       {documents.length ? (
-        <ul className="space-y-0.5 max-h-32 overflow-y-auto">
+        <ul className="space-y-0.5 max-h-32 overflow-y-auto thin-scroll">
           {documents.map((doc) => (
             <li key={doc.id} className="group flex items-center gap-2 px-1 py-1 text-xs">
               <span
@@ -97,13 +112,15 @@ export default function DocumentList({ documents }: { documents: Document[] }) {
                   failed
                 </span>
               )}
-              <button
-                onClick={() => handleDelete(doc.id)}
-                disabled={deletingId === doc.id}
-                className="text-red-400 hover:underline disabled:opacity-40 shrink-0"
-              >
-                {deletingId === doc.id ? '…' : 'Delete'}
-              </button>
+              {canDelete(doc) && (
+                <button
+                  onClick={() => handleDelete(doc.id)}
+                  disabled={deletingId === doc.id}
+                  className="text-red-400 hover:underline disabled:opacity-40 shrink-0"
+                >
+                  {deletingId === doc.id ? '…' : 'Delete'}
+                </button>
+              )}
             </li>
           ))}
         </ul>
