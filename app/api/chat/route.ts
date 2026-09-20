@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { callGemini, geminiErrorMessage } from '@/lib/gemini'
+import { isCitationGrounded } from '@/lib/citations'
 
 async function embedQuery(text: string): Promise<number[]> {
   const res = await fetch('https://api.voyageai.com/v1/embeddings', {
@@ -24,33 +25,6 @@ async function embedQuery(text: string): Promise<number[]> {
 
 // last N messages sent as context
 const MAX_HISTORY_MESSAGES = 10
-
-const STOPWORDS = new Set([
-  'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'to',
-  'of', 'in', 'on', 'at', 'for', 'with', 'by', 'from', 'as', 'and', 'or',
-  'but', 'if', 'this', 'that', 'it', 'its', 'has', 'have', 'had', 'not',
-  'no', 'do', 'does', 'did', 'can', 'will', 'would', 'could', 'should',
-  'their', 'they', 'he', 'she', 'you', 'your',
-])
-
-function significantWords(text: string): Set<string> {
-  return new Set(
-    text
-      .toLowerCase()
-      .replace(/[^a-z0-9\s]/g, ' ')
-      .split(/\s+/)
-      .filter((w) => w.length > 2 && !STOPWORDS.has(w))
-  )
-}
-
-function isCitationGrounded(claimSentence: string, sourceContent: string): boolean {
-  const claimWords = significantWords(claimSentence)
-  if (claimWords.size === 0) return true
-
-  const sourceWords = significantWords(sourceContent)
-  const overlap = [...claimWords].filter((w) => sourceWords.has(w)).length
-  return overlap / claimWords.size >= 0.3
-}
 
 export async function POST(request: Request) {
   const supabase = await createClient()

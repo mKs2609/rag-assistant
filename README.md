@@ -121,7 +121,8 @@ flowchart TD
 | LLM | Google Gemini |
 | Deployment | Vercel |
 | Custom visuals | Raw WebGL via `ogl`, no animation library |
-| CI | GitHub Actions running lint, typecheck and build |
+| Tests | Vitest, covering chunking, batching and citation checks |
+| CI | GitHub Actions running lint, typecheck, tests and build |
 
 ## Getting started
 
@@ -152,6 +153,7 @@ Other scripts:
 ```bash
 npm run lint       # eslint
 npm run typecheck  # tsc --noEmit
+npm test           # vitest
 npm run build      # production build
 ```
 
@@ -165,7 +167,9 @@ app/
   invite/        # public invite acceptance page
 components/      # custom WebGL visual components
 lib/
+  __tests__/     # unit tests for the pure functions
   documents/     # chunking, embedding and processing pipeline
+  citations.ts   # citation grounding check
   gemini.ts      # Gemini calls with retry on busy responses
   hooks/         # speech recognition and synthesis
   supabase/      # browser, server and admin clients

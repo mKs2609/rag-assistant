@@ -1,21 +1,8 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { extractText as extractPdfText, getDocumentProxy } from 'unpdf'
+import { chunkText, batchChunks } from '@/lib/documents/chunking'
 
-// voyage limits inputs and tokens per request, so embed in batches
-const EMBED_BATCH_SIZE = 128
-const EMBED_BATCH_CHAR_BUDGET = 400_000
 const INSERT_BATCH_SIZE = 200
-
-function chunkText(text: string, chunkSize = 1000, overlap = 150): string[] {
-  const chunks: string[] = []
-  let start = 0
-  while (start < text.length) {
-    const end = Math.min(start + chunkSize, text.length)
-    chunks.push(text.slice(start, end).trim())
-    start += chunkSize - overlap
-  }
-  return chunks.filter((c) => c.length > 0)
-}
 
 async function extractText(buffer: Buffer, filename: string): Promise<string> {
   const ext = filename.split('.').pop()?.toLowerCase()
@@ -31,30 +18,6 @@ async function extractText(buffer: Buffer, filename: string): Promise<string> {
   }
 
   throw new Error(`Unsupported file type: .${ext}. Supported: .pdf, .txt, .md`)
-}
-
-function batchChunks(chunks: string[]): string[][] {
-  const batches: string[][] = []
-  let current: string[] = []
-  let currentChars = 0
-
-  for (const chunk of chunks) {
-    const wouldExceed =
-      current.length >= EMBED_BATCH_SIZE ||
-      (current.length > 0 && currentChars + chunk.length > EMBED_BATCH_CHAR_BUDGET)
-
-    if (wouldExceed) {
-      batches.push(current)
-      current = []
-      currentChars = 0
-    }
-
-    current.push(chunk)
-    currentChars += chunk.length
-  }
-
-  if (current.length > 0) batches.push(current)
-  return batches
 }
 
 function sleep(ms: number) {
