@@ -34,6 +34,7 @@ Most RAG tutorials stop at: embed one PDF, run a vector search, paste the result
 - Citation grounding checks, saved with the answer so they survive a reload
 - Delete a question and its answer, with failed sends cleaned up automatically
 - Voice input and read-aloud using the browser's built-in speech APIs
+- Shared chats show who asked each question
 - Conversation history with rename, pin, delete, and plain-text export
 
 **Teams**
@@ -49,6 +50,7 @@ Most RAG tutorials stop at: embed one PDF, run a vector search, paste the result
 
 **Documents**
 - PDF, TXT and MD up to 10MB, uploaded straight from the browser to storage
+- Scanned PDFs fall back to OCR, so image-only documents are still searchable
 - Processing runs in the background, so uploads return immediately and the list updates itself
 - Embeddings are sent in batches, so large documents don't exceed the provider's per-request limit
 
@@ -106,6 +108,8 @@ flowchart TD
 
 **Processing off the request path.** Extracting and embedding a large PDF takes far longer than a request should. Processing now runs after the response is sent, using Next.js `after()` with an explicit time budget, and the document list polls until the status changes. Uploading a large file no longer blocks the browser or times out silently.
 
+**OCR only when it's needed.** Scanned PDFs hold images rather than text, so extraction returned nothing and the upload failed. Rather than add an OCR engine to the serverless function, which is slow and heavy, the pipeline falls back to Gemini when a PDF yields almost no text and asks it to transcribe the pages. Normal PDFs never pay that cost, and it reuses the API key that was already there.
+
 **Handling a busy model.** Gemini returns 503 when it is under load, and a single attempt failed often enough to be a problem. Requests now retry with backoff before giving up, and the user sees a short message rather than a raw API error. A failed question is removed from the chat instead of being left unanswered.
 
 ## Tech stack
@@ -121,7 +125,7 @@ flowchart TD
 | LLM | Google Gemini |
 | Deployment | Vercel |
 | Custom visuals | Raw WebGL via `ogl`, no animation library |
-| Tests | Vitest, covering chunking, batching and citation checks |
+| Tests | Vitest, covering chunking, batching, citation checks and the OCR trigger |
 | CI | GitHub Actions running lint, typecheck, tests and build |
 
 ## Getting started
@@ -170,6 +174,7 @@ lib/
   __tests__/     # unit tests for the pure functions
   documents/     # chunking, embedding and processing pipeline
   citations.ts   # citation grounding check
+  ocr.ts         # OCR fallback for scanned PDFs
   gemini.ts      # Gemini calls with retry on busy responses
   hooks/         # speech recognition and synthesis
   supabase/      # browser, server and admin clients
@@ -179,13 +184,11 @@ schema/          # SQL migrations, run in order
 ## Known gaps
 
 - **Email addresses aren't verified at signup.** Accounts are created as confirmed, so anyone can register with any address. Doing this properly needs an email provider configured in Supabase.
-- **Scanned PDFs aren't supported.** Text is extracted directly, so image-only documents produce nothing to search. OCR would fix this.
 - **Any workspace member can delete any document.** Documents are shared, and deletion isn't restricted to the uploader.
 
 ## Roadmap
 
 - Email verification at signup
-- OCR for scanned or image-based documents
 - Model-based citation verification as an optional higher-fidelity mode
 - Support for embedding providers beyond Voyage AI
 

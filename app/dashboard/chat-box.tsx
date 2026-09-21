@@ -17,6 +17,7 @@ interface Source {
 interface Message {
   id?: string
   userId?: string | null
+  senderName?: string | null
   role: 'user' | 'assistant'
   content: string
   sources?: Source[]
@@ -122,7 +123,15 @@ export default function ChatBox({
     lines.push('')
 
     for (const m of messages) {
-      lines.push(m.role === 'user' ? 'You:' : 'Assistant:')
+      const who =
+        m.role === 'assistant'
+          ? 'Assistant:'
+          : m.userId === currentUserId
+            ? 'You:'
+            : m.userId
+              ? `${m.senderName ?? 'Someone'}:`
+              : 'Question:'
+      lines.push(who)
       lines.push(m.content)
 
       if (m.sources && m.sources.length > 0) {
@@ -162,18 +171,22 @@ export default function ChatBox({
       setMessagesLoading(true)
       const { data } = await supabase
         .from('messages')
-        .select('id, user_id, role, content, sources')
+        .select('id, user_id, role, content, sources, profiles(display_name, email)')
         .eq('conversation_id', activeConversationId)
         .order('created_at', { ascending: true })
 
       if (!cancelled) {
-        const restored: Message[] = (data ?? []).map((m) => ({
+        const restored: Message[] = (data ?? []).map((m) => {
+          const sender = m.profiles as unknown as { display_name: string | null; email: string } | null
+          return {
           id: m.id as string,
           userId: m.user_id as string | null,
+          senderName: sender ? sender.display_name || sender.email : null,
           role: m.role as 'user' | 'assistant',
           content: m.content as string,
           sources: (m.sources as Source[] | null) ?? undefined,
-        }))
+          }
+        })
         setMessages(restored)
         setMessagesLoading(false)
       }
@@ -426,6 +439,11 @@ export default function ChatBox({
           return (
             <div key={i} className={(m.role === 'user' ? 'flex justify-end' : 'flex justify-start') + ' animate-message-in group'}>
               <div className="max-w-[85%] sm:max-w-[70%]">
+                {m.role === 'user' && m.userId && (
+                  <p className="mb-1 text-right text-xs text-pewter">
+                    {m.userId === currentUserId ? 'You' : (m.senderName ?? 'Someone')}
+                  </p>
+                )}
                 <div
                   className={
                     'px-4 py-3 text-[15px] leading-relaxed rounded-lg shadow-[rgba(4,4,7,0.25)_0px_2px_4px_0px,rgba(4,4,7,0.4)_0px_8px_24px_0px] flex items-start gap-2 ' +

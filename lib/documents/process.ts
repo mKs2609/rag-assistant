@@ -1,6 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { extractText as extractPdfText, getDocumentProxy } from 'unpdf'
 import { chunkText, batchChunks } from '@/lib/documents/chunking'
+import { needsOcr, ocrPdf } from '@/lib/ocr'
 
 const INSERT_BATCH_SIZE = 200
 
@@ -94,7 +95,20 @@ export async function processDocument(documentId: string) {
     }
 
     const buffer = Buffer.from(await fileData.arrayBuffer())
-    const text = await extractText(buffer, doc.filename)
+    let text = await extractText(buffer, doc.filename)
+
+    // scanned PDFs have no text layer, read the pages as images instead
+    if (doc.filename.toLowerCase().endsWith('.pdf') && needsOcr(text)) {
+      try {
+        const ocrText = await ocrPdf(buffer)
+        if (ocrText.length > text.trim().length) {
+          console.log(`OCR recovered ${ocrText.length} characters from ${doc.filename}`)
+          text = ocrText
+        }
+      } catch (err) {
+        console.error('OCR failed:', err)
+      }
+    }
 
     if (!text.trim()) {
       throw new Error('No extractable text found in file')
