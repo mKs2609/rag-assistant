@@ -95,6 +95,7 @@ flowchart TD
 - Prompt-injection defense: retrieved content is passed as untrusted reference material, never as instructions
 - Invite links are claimed atomically, so the same link cannot be used twice at the same moment
 - Email verification at signup, with a resend option on the login page
+- Password reset by email that works even when the link is opened on another device, and signs out other sessions afterwards
 - Signup gives the same response whether or not an email is already registered
 - File size is enforced on the server, not just in the browser
 - The rate-limit table has RLS enabled with no policy, so only the service role can touch it
@@ -169,6 +170,7 @@ app/
   api/           # chat, documents, conversations, messages, eval, team, invites, profile, tenants
   dashboard/     # main authenticated UI: chat, documents, evaluation, team
   login/ signup/ # auth pages
+  forgot-password/ reset-password/ # password reset by email
   invite/        # public invite acceptance page
 components/      # custom WebGL visual components
 lib/
