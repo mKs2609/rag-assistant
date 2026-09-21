@@ -20,7 +20,7 @@ export default function InvitePage() {
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [likelyExistingAccount, setLikelyExistingAccount] = useState(false)
+  const [sentTo, setSentTo] = useState('')
 
   useEffect(() => {
     async function checkInvite() {
@@ -40,7 +40,7 @@ export default function InvitePage() {
     e.preventDefault()
     setLoading(true)
     setError('')
-    setLikelyExistingAccount(false)
+    setSentTo('')
 
     const res = await fetch('/api/tenants', {
       method: 'POST',
@@ -53,9 +53,11 @@ export default function InvitePage() {
 
     if (!res.ok) {
       setError(data.error ?? 'Something went wrong')
-      if (data.error?.toLowerCase().includes('already have an account')) {
-        setLikelyExistingAccount(true)
-      }
+      return
+    }
+
+    if (data.needsConfirmation) {
+      setSentTo(email)
       return
     }
 
@@ -161,15 +163,12 @@ export default function InvitePage() {
                     )}
                   </button>
                 </div>
-                {error && (
-                  <div className="space-y-1">
-                    <p className="text-red-400 text-sm">{error}</p>
-                    {likelyExistingAccount && (
-                      <a href="/login" className="text-[#c99a5b] underline text-sm block">
-                        Log in instead
-                      </a>
-                    )}
-                  </div>
+                {error && <p className="text-red-400 text-sm">{error}</p>}
+                {sentTo && (
+                  <p className="text-sm text-bone" role="status">
+                    We&apos;ve sent a confirmation link to <span className="text-[#c99a5b]">{sentTo}</span>.
+                    Click it, then <a href="/login" className="text-[#c99a5b] underline">log in</a>.
+                  </p>
                 )}
                 <button
                   type="submit"

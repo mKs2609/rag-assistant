@@ -1,10 +1,12 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import Strands from '@/components/Strands'
 import ElectricBorder from '@/components/ElectricBorder'
+
+const noopSubscribe = () => () => {}
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -12,6 +14,22 @@ export default function LoginPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
+  const [unconfirmed, setUnconfirmed] = useState(false)
+  const [resendState, setResendState] = useState<'idle' | 'sending' | 'sent'>('idle')
+
+  // the link in the confirmation email lands here with ?confirmed=1
+  const justConfirmed = useSyncExternalStore(
+    noopSubscribe,
+    () => new URLSearchParams(window.location.search).get('confirmed') === '1',
+    () => false
+  )
+
+  // the confirm redirect also carries tokens in the hash, don't leave them in the address bar
+  useEffect(() => {
+    if (window.location.hash.includes('access_token')) {
+      window.history.replaceState(null, '', window.location.pathname + window.location.search)
+    }
+  }, [])
   const router = useRouter()
   const supabase = createClient()
 
@@ -19,17 +37,42 @@ export default function LoginPage() {
     e.preventDefault()
     setLoading(true)
     setError('')
+    setUnconfirmed(false)
+    setResendState('idle')
 
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     setLoading(false)
 
     if (error) {
-      setError(error.message)
+      if (error.code === 'email_not_confirmed') {
+        setUnconfirmed(true)
+        setError('Please confirm your email first. Check your inbox for the link.')
+      } else if (error.name === 'AuthRetryableFetchError') {
+        // the request never reached supabase, e.g. connection dropped or blocked by an extension
+        setError("Couldn't reach the server. Check your connection and try again.")
+      } else {
+        setError(error.message)
+      }
       return
     }
 
     router.push('/dashboard')
     router.refresh()
+  }
+
+  async function handleResend() {
+    setResendState('sending')
+    const { error } = await supabase.auth.resend({
+      type: 'signup',
+      email,
+      options: { emailRedirectTo: `${window.location.origin}/login?confirmed=1` },
+    })
+    if (error) {
+      setResendState('idle')
+      setError(error.message)
+      return
+    }
+    setResendState('sent')
   }
 
   return (
@@ -106,7 +149,24 @@ export default function LoginPage() {
                 )}
               </button>
             </div>
+            {justConfirmed && !error && (
+              <p className="text-sm text-bone" role="status">Email confirmed. You can log in now.</p>
+            )}
             {error && <p className="text-red-400 text-sm">{error}</p>}
+            {unconfirmed && (
+              <button
+                type="button"
+                onClick={handleResend}
+                disabled={resendState !== 'idle'}
+                className="text-sm text-[#c99a5b] underline disabled:no-underline disabled:opacity-70"
+              >
+                {resendState === 'sending'
+                  ? 'Sending…'
+                  : resendState === 'sent'
+                    ? 'Confirmation email sent'
+                    : 'Resend confirmation email'}
+              </button>
+            )}
             <button
               type="submit"
               disabled={loading}

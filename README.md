@@ -94,7 +94,8 @@ flowchart TD
 - IDOR protection on document, conversation and message routes, with workspace filters in the API as a second layer
 - Prompt-injection defense: retrieved content is passed as untrusted reference material, never as instructions
 - Invite links are claimed atomically, so the same link cannot be used twice at the same moment
-- Signup errors don't reveal whether an email is already registered
+- Email verification at signup, with a resend option on the login page
+- Signup gives the same response whether or not an email is already registered
 - File size is enforced on the server, not just in the browser
 - The rate-limit table has RLS enabled with no policy, so only the service role can touch it
 
@@ -183,12 +184,11 @@ schema/          # SQL migrations, run in order
 
 ## Known gaps
 
-- **Email addresses aren't verified at signup.** Accounts are created as confirmed, so anyone can register with any address. Doing this properly needs an email provider configured in Supabase.
-- **Any workspace member can delete any document.** Documents are shared, and deletion isn't restricted to the uploader.
+- **Long scanned PDFs can time out.** OCR sends the whole file to Gemini, and processing has a 60 second budget, so a scan of many pages may be marked failed.
+- **Short numbers don't count toward citation checks.** Words of two characters or fewer are ignored, so a day of the month like `15` is never used to verify a citation.
 
 ## Roadmap
 
-- Email verification at signup
 - Model-based citation verification as an optional higher-fidelity mode
 - Support for embedding providers beyond Voyage AI
 

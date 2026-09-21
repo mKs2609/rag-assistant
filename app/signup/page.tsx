@@ -13,6 +13,7 @@ export default function SignupPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
+  const [sentTo, setSentTo] = useState('')
   const router = useRouter()
 
   async function handleSubmit(e: React.FormEvent) {
@@ -31,6 +32,11 @@ export default function SignupPage() {
 
     if (!res.ok) {
       setError(data.error ?? 'Something went wrong')
+      return
+    }
+
+    if (data.needsConfirmation) {
+      setSentTo(email)
       return
     }
 
@@ -129,6 +135,12 @@ export default function SignupPage() {
               </button>
             </div>
             {error && <p className="text-red-400 text-sm">{error}</p>}
+            {sentTo && (
+              <p className="text-sm text-bone" role="status">
+                We&apos;ve sent a confirmation link to <span className="text-[#c99a5b]">{sentTo}</span>.
+                Click it, then <a href="/login" className="text-[#c99a5b] underline">log in</a>.
+              </p>
+            )}
             <button
               type="submit"
               disabled={loading}
