@@ -44,12 +44,26 @@ test('upload a document, ask about it, get a cited answer, then delete the quest
   const question = 'What is the locker code for the east archive room?'
 
   await test.step('ask a question and get an answer that uses the document', async () => {
-    await page.getByPlaceholder('Ask something about your documents...').fill(question)
-    await page.getByRole('button', { name: 'Send' }).click()
+    const answered = page.getByTestId('assistant-message').filter({ hasText: code })
+    const modelBusy = page.getByText('busy right now')
 
-    const answer = page.getByTestId('assistant-message').last()
-    await expect(answer).toContainText(code, { timeout: 120_000 })
-    await expect(answer.getByTestId('source-card').first()).toContainText(fileName)
+    // gemini returns 503 under load even after the app's own retries, so ask again
+    let gotAnswer = false
+    for (let attempt = 1; attempt <= 3 && !gotAnswer; attempt++) {
+      await page.getByPlaceholder('Ask something about your documents...').fill(question)
+      await page.getByRole('button', { name: 'Send' }).click()
+
+      const outcome = await Promise.race([
+        answered.waitFor({ state: 'visible', timeout: 150_000 }).then(() => 'answered').catch(() => 'timeout'),
+        modelBusy.waitFor({ state: 'visible', timeout: 150_000 }).then(() => 'busy').catch(() => 'timeout'),
+      ])
+
+      if (outcome === 'answered') gotAnswer = true
+      else await page.waitForTimeout(5_000)
+    }
+
+    expect(gotAnswer, 'the model never answered, it was busy on every attempt').toBe(true)
+    await expect(answered.first().getByTestId('source-card').first()).toContainText(fileName)
   })
 
   await test.step('delete the question and its answer', async () => {
