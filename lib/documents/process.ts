@@ -71,7 +71,8 @@ async function getEmbeddings(texts: string[]): Promise<number[][]> {
 }
 
 // download -> extract -> chunk -> embed -> store -> mark ready/failed
-export async function processDocument(documentId: string) {
+// deadline is when the platform will stop this function, so long work can stop cleanly first
+export async function processDocument(documentId: string, deadline = Infinity) {
   const admin = createAdminClient()
 
   const { data: doc, error: docError } = await admin
@@ -100,7 +101,7 @@ export async function processDocument(documentId: string) {
     // scanned PDFs have no text layer, read the pages as images instead
     if (doc.filename.toLowerCase().endsWith('.pdf') && needsOcr(text)) {
       try {
-        const ocrText = await ocrPdf(buffer)
+        const ocrText = await ocrPdf(buffer, deadline)
         if (ocrText.length > text.trim().length) {
           console.log(`OCR recovered ${ocrText.length} characters from ${doc.filename}`)
           text = ocrText

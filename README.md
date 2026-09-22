@@ -50,7 +50,7 @@ Most RAG tutorials stop at: embed one PDF, run a vector search, paste the result
 
 **Documents**
 - PDF, TXT and MD up to 10MB, uploaded straight from the browser to storage
-- Scanned PDFs fall back to OCR, so image-only documents are still searchable
+- Scanned PDFs fall back to OCR, so image-only documents are still searchable. Long scans are read 10 pages at a time
 - Processing runs in the background, so uploads return immediately and the list updates itself
 - Embeddings are sent in batches, so large documents don't exceed the provider's per-request limit
 
@@ -95,6 +95,7 @@ flowchart TD
 - Prompt-injection defense: retrieved content is passed as untrusted reference material, never as instructions
 - Invite links are claimed atomically, so the same link cannot be used twice at the same moment
 - Email verification at signup, with a resend option on the login page
+- Accounts that are never confirmed are deleted after 7 days by a nightly database job, with the empty workspace they created
 - Password reset by email that works even when the link is opened on another device, and signs out other sessions afterwards
 - Signup gives the same response whether or not an email is already registered
 - File size is enforced on the server, not just in the browser
@@ -112,6 +113,8 @@ flowchart TD
 
 **OCR only when it's needed.** Scanned PDFs hold images rather than text, so extraction returned nothing and the upload failed. Rather than add an OCR engine to the serverless function, which is slow and heavy, the pipeline falls back to Gemini when a PDF yields almost no text and asks it to transcribe the pages. Normal PDFs never pay that cost, and it reuses the API key that was already there.
 
+**Long scans, measured rather than guessed.** Splitting a scan into 10-page requests and sending them in parallel looked like the obvious speed-up. Measured on a 23-page scan, it was the opposite: 34 seconds one group at a time versus 252 seconds with three in parallel, because the free Gemini tier queues parallel requests from one key. So groups run one at a time, processing has a 300 second budget, and OCR checks the clock before each group. If time is about to run out it stops and marks the document failed, instead of the platform killing the function and leaving it stuck on "processing".
+
 **Handling a busy model.** Gemini returns 503 when it is under load, and a single attempt failed often enough to be a problem. Requests now retry with backoff before giving up, and the user sees a short message rather than a raw API error. A failed question is removed from the chat instead of being left unanswered.
 
 ## Tech stack
@@ -127,8 +130,8 @@ flowchart TD
 | LLM | Google Gemini |
 | Deployment | Vercel |
 | Custom visuals | Raw WebGL via `ogl`, no animation library |
-| Tests | Vitest, covering chunking, batching, citation checks and the OCR trigger |
-| CI | GitHub Actions running lint, typecheck, tests and build |
+| Tests | Vitest unit tests, and Playwright end-to-end tests in a real browser |
+| CI | GitHub Actions: lint, typecheck, unit tests and build on every push; end-to-end tests weekly and on demand |
 
 ## Getting started
 
@@ -148,7 +151,7 @@ VOYAGE_API_KEY=
 GEMINI_API_KEY=
 ```
 
-Create a Supabase project, then run the files in [`/schema`](schema) in order (`001` to `010`) in the SQL Editor. They create the tables, indexes, search functions, RLS policies and the storage bucket, and can be re-run safely. Then:
+Create a Supabase project, then run the files in [`/schema`](schema) in order (`001` to `012`) in the SQL Editor. They create the tables, indexes, search functions, RLS policies and the storage bucket, and can be re-run safely. Then:
 
 ```bash
 npm run dev
@@ -161,7 +164,18 @@ npm run lint       # eslint
 npm run typecheck  # tsc --noEmit
 npm test           # vitest
 npm run build      # production build
+npm run test:e2e   # playwright, see below
 ```
+
+### End-to-end tests
+
+These drive a real browser through login, uploading a document, asking about it, and deleting the question. They create and delete users and data, so they need **their own Supabase project**, never the real one, and they refuse to start if pointed at the project in `.env.local`.
+
+1. Create a second Supabase project and run the `/schema` files in it
+2. Copy `.env.e2e.example` to `.env.e2e` and fill in that project's URL and keys
+3. Run `npm run test:e2e`
+
+In CI they run from the **E2E** workflow, weekly and on demand, using the same values stored as repository secrets. They call Voyage and Gemini for real, which is why they don't run on every push.
 
 ## Project structure
 
@@ -182,11 +196,12 @@ lib/
   hooks/         # speech recognition and synthesis
   supabase/      # browser, server and admin clients
 schema/          # SQL migrations, run in order
+e2e/             # playwright end-to-end tests
 ```
 
 ## Known gaps
 
-- **Long scanned PDFs can time out.** OCR sends the whole file to Gemini, and processing has a 60 second budget, so a scan of many pages may be marked failed.
+- **Very long scans can still fail.** OCR reads 10 pages per request, one request at a time, within a 300 second budget. Gemini's response time varies a lot, so a scan of many dozens of pages may run out of time and be marked failed rather than finishing.
 - **Short numbers don't count toward citation checks.** Words of two characters or fewer are ignored, so a day of the month like `15` is never used to verify a citation.
 
 ## Roadmap

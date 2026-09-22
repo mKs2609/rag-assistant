@@ -4,10 +4,11 @@ import { processDocument } from '@/lib/documents/process'
 
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024
 
-// processing runs in after() and needs time for large PDFs
-export const maxDuration = 60
+// processing runs in after() and needs time for large PDFs and scans that go through OCR
+export const maxDuration = 300
 
 export async function POST(request: Request) {
+  const startedAt = Date.now()
   try {
     const supabase = await createClient()
 
@@ -93,7 +94,8 @@ export async function POST(request: Request) {
     }
 
     // process in the background, the UI polls for the status
-    after(() => processDocument(document.id))
+    const deadline = startedAt + maxDuration * 1000
+    after(() => processDocument(document.id, deadline))
 
     return NextResponse.json({ success: true, documentId: document.id })
   } catch (err) {

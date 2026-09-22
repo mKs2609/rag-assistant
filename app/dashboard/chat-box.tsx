@@ -437,7 +437,11 @@ export default function ChatBox({
           const isEmptyAssistantPlaceholder = m.role === 'assistant' && m.content === ''
 
           return (
-            <div key={i} className={(m.role === 'user' ? 'flex justify-end' : 'flex justify-start') + ' animate-message-in group'}>
+            <div
+              key={i}
+              data-testid={m.role === 'user' ? 'user-message' : 'assistant-message'}
+              className={(m.role === 'user' ? 'flex justify-end' : 'flex justify-start') + ' animate-message-in group'}
+            >
               <div className="max-w-[85%] sm:max-w-[70%]">
                 {m.role === 'user' && m.userId && (
                   <p className="mb-1 text-right text-xs text-pewter">
@@ -520,7 +524,7 @@ export default function ChatBox({
                 {m.sources && m.sources.length > 0 && (
                   <div className="mt-2 space-y-1.5">
                     {m.sources.map((s, j) => (
-                      <div key={j} className="rounded-lg px-3 py-2 text-xs bg-inkwell shadow-[rgba(0,0,0,0.12)_0px_12px_12px_0px]">
+                      <div key={j} data-testid="source-card" className="rounded-lg px-3 py-2 text-xs bg-inkwell shadow-[rgba(0,0,0,0.12)_0px_12px_12px_0px]">
                         <div className="flex items-center gap-1.5 text-pewter">
                           <span className="font-mono text-[#c99a5b]">[{j + 1}]</span>
                           <span className="text-bone">{s.filename}</span>

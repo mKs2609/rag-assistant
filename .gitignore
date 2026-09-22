@@ -12,9 +12,12 @@
 
 # testing
 /coverage
+/playwright-report/
+/test-results/
 
 # next.js
 /.next/
+/.next-e2e/
 /out/
 
 # production
@@ -32,6 +35,7 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.e2e.example
 
 # vercel
 .vercel

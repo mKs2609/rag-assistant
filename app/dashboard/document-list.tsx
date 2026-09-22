@@ -23,8 +23,8 @@ const statusLabel: Record<string, string> = {
 }
 
 const POLL_INTERVAL_MS = 3000
-// stop polling after ~3 minutes
-const MAX_POLLS = 60
+// stop polling after ~6 minutes, processing can take up to 5
+const MAX_POLLS = 120
 
 export default function DocumentList({
   documents,
