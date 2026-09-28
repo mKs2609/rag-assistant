@@ -6,7 +6,9 @@ import { createClient } from '@/lib/supabase/client'
 import { uploadDocumentDirect } from '@/lib/documents/upload-client'
 import { useSpeechRecognition } from '@/lib/hooks/useSpeechRecognition'
 import { useSpeechSynthesis } from '@/lib/hooks/useSpeechSynthesis'
+import { toSpokenText } from '@/lib/markdown'
 import AttachMenu from './attach-menu'
+import RichText from './rich-text'
 
 interface Source {
   filename: string
@@ -45,35 +47,6 @@ interface Document {
 interface ScopedDocument {
   id: string
   filename: string
-}
-
-// render **bold** and "* " bullets from gemini's markdown
-function renderFormattedText(text: string) {
-  return text.split('\n').map((line, i) => {
-    const bulletMatch = line.match(/^\s*\*\s+(.*)/)
-    const content = bulletMatch ? bulletMatch[1] : line
-    const parts = content.split(/(\*\*[^*]+\*\*)/g).map((part, j) =>
-      part.startsWith('**') && part.endsWith('**') ? (
-        <strong key={j} className="font-semibold">{part.slice(2, -2)}</strong>
-      ) : (
-        part
-      )
-    )
-    return (
-      <span key={i} className="block">
-        {bulletMatch && '• '}
-        {parts}
-      </span>
-    )
-  })
-}
-
-// strip markdown and [1] citations before reading aloud
-function stripMarkdownForSpeech(text: string): string {
-  return text
-    .replace(/\*\*(.+?)\*\*/g, '$1')
-    .replace(/^\s*\*\s+/gm, '')
-    .replace(/\[\d+\]/g, '')
 }
 
 export default function ChatBox({
@@ -466,12 +439,14 @@ export default function ChatBox({
                       {m.status && <span className="text-sm text-pewter">{m.status}</span>}
                     </span>
                   ) : (
-                    <span className="flex-1 whitespace-pre-wrap">{renderFormattedText(m.content)}</span>
+                    <div className="flex-1 min-w-0">
+                      <RichText text={m.content} />
+                    </div>
                   )}
                   {m.role === 'assistant' && !isEmptyAssistantPlaceholder && speechSupported && (
                     <button
                       type="button"
-                      onClick={() => (isSpeaking ? stopSpeaking() : speak(stripMarkdownForSpeech(m.content), messageId))}
+                      onClick={() => (isSpeaking ? stopSpeaking() : speak(toSpokenText(m.content), messageId))}
                       className="text-pewter hover:text-bone shrink-0 mt-0.5"
                       aria-label={isSpeaking ? 'Stop reading aloud' : 'Read this message aloud'}
                     >
@@ -526,7 +501,7 @@ export default function ChatBox({
                     {m.sources.map((s, j) => (
                       <div key={j} data-testid="source-card" className="rounded-lg px-3 py-2 text-xs bg-inkwell shadow-[rgba(0,0,0,0.12)_0px_12px_12px_0px]">
                         <div className="flex items-center gap-1.5 text-pewter">
-                          <span className="font-mono text-[#c99a5b]">[{j + 1}]</span>
+                          <span className="font-mono text-accent">[{j + 1}]</span>
                           <span className="text-bone">{s.filename}</span>
                           {s.verified === true && (
                             <span className="text-slate" title="This citation matches its source">✓ verified</span>

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { callGemini, geminiErrorMessage } from '@/lib/gemini'
 import { isCitationGrounded } from '@/lib/citations'
+import { verifyChartsIn } from '@/lib/charts'
 
 async function embedQuery(text: string): Promise<number[]> {
   const res = await fetch('https://api.voyageai.com/v1/embeddings', {
@@ -231,6 +232,16 @@ export async function POST(request: Request) {
 
 If the answer isn't in the reference material, say so clearly instead of guessing. When you use information from a source, cite it with its bracket number, like [1].
 
+Use markdown when it makes the answer clearer: tables for several values, bullet points for lists, ## for section headings.
+
+When the answer compares three or more numbers that belong together, such as amounts per quarter or a count per category, add a chart after the prose. Write it as a fenced block marked chart containing JSON:
+
+\`\`\`chart
+{"kind":"bar","title":"Revenue by quarter","unit":"lakh","points":[{"label":"Q1","value":1240,"source":1},{"label":"Q2","value":1560,"source":1}]}
+\`\`\`
+
+Rules for charts: every value must appear in the reference material exactly as written there, never estimated or rounded; "source" is the bracket number of the passage the value came from; include at least two points; use "line" only for values that change over time. Do not add a chart when there is nothing to compare.
+
 Reference material:
 ${context}`
 
@@ -295,7 +306,9 @@ ${context}`
         return
       }
 
-      const answer = fullText || 'No response generated.'
+      // the model supplies chart numbers, so check each one against the full passage it
+      // claims to come from and record the verdict in the answer before it is saved
+      const answer = verifyChartsIn(fullText || 'No response generated.', matches.map((m) => m.content))
 
       const verifiedFlags: Record<number, boolean> = {}
       const sentences = answer.split(/(?<=[.!?])\s+/)
