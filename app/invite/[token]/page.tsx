@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Strands from '@/components/Strands'
 import ElectricBorder from '@/components/ElectricBorder'
+import { ACCENT } from '@/lib/theme'
 
 export default function InvitePage() {
   const params = useParams()
@@ -92,7 +93,7 @@ export default function InvitePage() {
       </div>
 
       <ElectricBorder
-        color="#c99a5b"
+        color={ACCENT}
         speed={0.6}
         chaos={0.08}
         borderRadius={16}
@@ -106,10 +107,10 @@ export default function InvitePage() {
             <>
               <h1 className="text-xl font-medium font-display text-bone">Invite unavailable</h1>
               <p className="text-bone/70 text-sm">{invalidReason}</p>
-              <a href="/signup" className="text-[#c99a5b] underline text-sm block">
+              <a href="/signup" className="text-accent underline text-sm block">
                 Create your own workspace instead
               </a>
-              <a href="/login" className="text-[#c99a5b] underline text-sm block">
+              <a href="/login" className="text-accent underline text-sm block">
                 Log in
               </a>
             </>
@@ -166,14 +167,14 @@ export default function InvitePage() {
                 {error && <p className="text-red-400 text-sm">{error}</p>}
                 {sentTo && (
                   <p className="text-sm text-bone" role="status">
-                    We&apos;ve sent a confirmation link to <span className="text-[#c99a5b]">{sentTo}</span>.
-                    Click it, then <a href="/login" className="text-[#c99a5b] underline">log in</a>.
+                    We&apos;ve sent a confirmation link to <span className="text-accent">{sentTo}</span>.
+                    Click it, then <a href="/login" className="text-accent underline">log in</a>.
                   </p>
                 )}
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full bg-[#c99a5b] text-obsidian rounded px-3 py-2 disabled:opacity-50 hover:opacity-90 transition-opacity"
+                  className="w-full bg-accent text-obsidian rounded px-3 py-2 disabled:opacity-50 hover:opacity-90 transition-opacity"
                 >
                   {loading ? 'Joining…' : 'Join workspace'}
                 </button>

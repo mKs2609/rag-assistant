@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import Strands from '@/components/Strands'
 import ElectricBorder from '@/components/ElectricBorder'
+import { ACCENT } from '@/lib/theme'
 
 const noopSubscribe = () => () => {}
 
@@ -103,7 +104,7 @@ export default function LoginPage() {
       </div>
 
       <ElectricBorder
-        color="#c99a5b"
+        color={ACCENT}
         speed={0.6}
         chaos={0.08}
         borderRadius={16}
@@ -158,7 +159,7 @@ export default function LoginPage() {
                 type="button"
                 onClick={handleResend}
                 disabled={resendState !== 'idle'}
-                className="text-sm text-[#c99a5b] underline disabled:no-underline disabled:opacity-70"
+                className="text-sm text-accent underline disabled:no-underline disabled:opacity-70"
               >
                 {resendState === 'sending'
                   ? 'Sending…'
@@ -170,7 +171,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-[#c99a5b] text-obsidian rounded px-3 py-2 disabled:opacity-50 hover:opacity-90 transition-opacity"
+              className="w-full bg-accent text-obsidian rounded px-3 py-2 disabled:opacity-50 hover:opacity-90 transition-opacity"
             >
               {loading ? 'Logging in…' : 'Log in'}
             </button>
@@ -182,7 +183,7 @@ export default function LoginPage() {
           </p>
           <p className="text-sm text-center text-fog">
             Don&apos;t have an account?{' '}
-            <a href="/signup" className="text-[#c99a5b] underline">
+            <a href="/signup" className="text-accent underline">
               Sign up
             </a>
           </p>

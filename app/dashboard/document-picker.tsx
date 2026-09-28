@@ -42,7 +42,7 @@ export default function DocumentPicker({
                 type="checkbox"
                 checked={selectedIds.includes(doc.id)}
                 onChange={() => onToggle(doc.id)}
-                className="accent-[#c99a5b]"
+                className="accent-accent"
               />
               <span className="truncate">{doc.filename}</span>
             </label>
@@ -58,7 +58,7 @@ export default function DocumentPicker({
           </button>
           <button
             onClick={onStart}
-            className="flex-1 border border-[#c99a5b] text-[#c99a5b] rounded px-4 py-2 text-sm hover:bg-[#c99a5b]/10 transition-colors"
+            className="flex-1 border border-accent text-accent rounded px-4 py-2 text-sm hover:bg-accent/10 transition-colors"
           >
             {selectedIds.length > 0 ? `Start with ${selectedIds.length} selected` : 'Start with all documents'}
           </button>

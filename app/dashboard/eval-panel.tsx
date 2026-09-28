@@ -246,7 +246,7 @@ export default function EvalPanel({ documents }: { documents: Document[] }) {
           <button
             onClick={handleRunAll}
             disabled={anyRunning || questions.length === 0}
-            className="border border-[#c99a5b] text-[#c99a5b] rounded px-4 py-1.5 text-xs disabled:opacity-40 hover:bg-[#c99a5b]/10 transition-colors"
+            className="border border-accent text-accent rounded px-4 py-1.5 text-xs disabled:opacity-40 hover:bg-accent/10 transition-colors"
           >
             {runningAll ? 'Running all…' : 'Run all'}
           </button>
@@ -274,7 +274,7 @@ export default function EvalPanel({ documents }: { documents: Document[] }) {
 
               <button
                 onClick={() => setOpenMenuId(openMenuId === q.id ? null : q.id)}
-                className="shrink-0 text-bone hover:text-[#c99a5b] px-1"
+                className="shrink-0 text-bone hover:text-accent px-1"
                 aria-label="Question options"
               >
                 ⋯
@@ -285,7 +285,7 @@ export default function EvalPanel({ documents }: { documents: Document[] }) {
                   <button
                     onClick={() => handleRunOne(q.id)}
                     disabled={anyRunning}
-                    className="w-full text-left px-3 py-2 text-sm text-[#c99a5b] hover:bg-bone/10 disabled:opacity-40"
+                    className="w-full text-left px-3 py-2 text-sm text-accent hover:bg-bone/10 disabled:opacity-40"
                   >
                     {runningId === q.id ? 'Running…' : 'Run'}
                   </button>

@@ -77,7 +77,7 @@ export default function ResetPasswordPage() {
           <p className="text-sm text-red-400">
             This reset link is invalid or has expired. Links can only be used once.
           </p>
-          <a href="/forgot-password" className="text-sm text-[#c99a5b] underline block">
+          <a href="/forgot-password" className="text-sm text-accent underline block">
             Send a new link
           </a>
         </>
@@ -119,7 +119,7 @@ export default function ResetPasswordPage() {
           <button
             type="submit"
             disabled={saving}
-            className="w-full bg-[#c99a5b] text-obsidian rounded px-3 py-2 disabled:opacity-50 hover:opacity-90 transition-opacity"
+            className="w-full bg-accent text-obsidian rounded px-3 py-2 disabled:opacity-50 hover:opacity-90 transition-opacity"
           >
             {saving ? 'Saving…' : 'Save new password'}
           </button>

@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Strands from '@/components/Strands'
 import ElectricBorder from '@/components/ElectricBorder'
+import { ACCENT } from '@/lib/theme'
 
 export default function SignupPage() {
   const [email, setEmail] = useState('')
@@ -71,7 +72,7 @@ export default function SignupPage() {
       </div>
 
       <ElectricBorder
-        color="#c99a5b"
+        color={ACCENT}
         speed={0.6}
         chaos={0.08}
         borderRadius={16}
@@ -137,21 +138,21 @@ export default function SignupPage() {
             {error && <p className="text-red-400 text-sm">{error}</p>}
             {sentTo && (
               <p className="text-sm text-bone" role="status">
-                We&apos;ve sent a confirmation link to <span className="text-[#c99a5b]">{sentTo}</span>.
-                Click it, then <a href="/login" className="text-[#c99a5b] underline">log in</a>.
+                We&apos;ve sent a confirmation link to <span className="text-accent">{sentTo}</span>.
+                Click it, then <a href="/login" className="text-accent underline">log in</a>.
               </p>
             )}
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-[#c99a5b] text-obsidian rounded px-3 py-2 disabled:opacity-50 hover:opacity-90 transition-opacity"
+              className="w-full bg-accent text-obsidian rounded px-3 py-2 disabled:opacity-50 hover:opacity-90 transition-opacity"
             >
               {loading ? 'Creating…' : 'Create workspace'}
             </button>
           </form>
           <p className="text-sm text-center text-fog">
             Already have an account?{' '}
-            <a href="/login" className="text-[#c99a5b] underline">
+            <a href="/login" className="text-accent underline">
               Log in
             </a>
           </p>

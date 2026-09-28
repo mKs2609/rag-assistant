@@ -264,7 +264,7 @@ export default function TeamPanel({
             <button
               onClick={handleSaveWorkspaceName}
               disabled={savingWorkspaceName}
-              className="text-[#c99a5b] text-sm hover:underline disabled:opacity-40"
+              className="text-accent text-sm hover:underline disabled:opacity-40"
             >
               {savingWorkspaceName ? 'Saving…' : 'Save'}
             </button>
@@ -285,7 +285,7 @@ export default function TeamPanel({
               <>
                 <button
                   onClick={() => setOpenMenuId(openMenuId === 'workspace' ? null : 'workspace')}
-                  className="text-bone hover:text-[#c99a5b] px-1"
+                  className="text-bone hover:text-accent px-1"
                   aria-label="Workspace options"
                 >
                   ⋯
@@ -348,7 +348,7 @@ export default function TeamPanel({
                         <button
                           onClick={handleSaveOwnName}
                           disabled={savingOwnName}
-                          className="text-[#c99a5b] text-xs hover:underline disabled:opacity-40 shrink-0"
+                          className="text-accent text-xs hover:underline disabled:opacity-40 shrink-0"
                         >
                           {savingOwnName ? 'Saving…' : 'Save'}
                         </button>
@@ -373,7 +373,7 @@ export default function TeamPanel({
                           {hasAnyMenuAction && (
                             <button
                               onClick={() => setOpenMenuId(openMenuId === m.id ? null : m.id)}
-                              className="text-bone hover:text-[#c99a5b] px-1"
+                              className="text-bone hover:text-accent px-1"
                               aria-label="Member options"
                             >
                               ⋯
@@ -385,7 +385,7 @@ export default function TeamPanel({
                             {isMe && (
                               <button
                                 onClick={() => startEditingOwnName(m.display_name ?? friendlyName(m))}
-                                className="w-full text-left px-3 py-2 text-sm text-[#c99a5b] hover:bg-bone/10"
+                                className="w-full text-left px-3 py-2 text-sm text-accent hover:bg-bone/10"
                               >
                                 Edit name
                               </button>
@@ -418,7 +418,7 @@ export default function TeamPanel({
                 <button
                   onClick={handleGenerateInvite}
                   disabled={generating}
-                  className="border border-[#c99a5b] text-[#c99a5b] rounded px-4 py-1.5 text-xs disabled:opacity-40 hover:bg-[#c99a5b]/10 transition-colors"
+                  className="border border-accent text-accent rounded px-4 py-1.5 text-xs disabled:opacity-40 hover:bg-accent/10 transition-colors"
                 >
                   {generating ? 'Generating…' : '+ Generate invite link'}
                 </button>
@@ -441,7 +441,7 @@ export default function TeamPanel({
                       <div className="flex items-center gap-3 shrink-0">
                         <button
                           onClick={() => copyInviteLink(inv.token)}
-                          className="text-[#c99a5b] hover:underline text-xs"
+                          className="text-accent hover:underline text-xs"
                         >
                           {copiedToken === inv.token ? 'Copied!' : 'Copy link'}
                         </button>

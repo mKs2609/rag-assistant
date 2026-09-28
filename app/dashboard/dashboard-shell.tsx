@@ -160,7 +160,7 @@ export default function DashboardShell({
             className={
               'w-full text-sm border px-3 py-2 transition-colors ' +
               (view === 'eval'
-                ? 'border-[#c99a5b] text-[#c99a5b]'
+                ? 'border-accent text-accent'
                 : 'border-ash text-bone hover:bg-bone/10')
             }
           >
@@ -174,7 +174,7 @@ export default function DashboardShell({
             className={
               'w-full text-sm border px-3 py-2 transition-colors ' +
               (view === 'team'
-                ? 'border-[#c99a5b] text-[#c99a5b]'
+                ? 'border-accent text-accent'
                 : 'border-ash text-bone hover:bg-bone/10')
             }
           >

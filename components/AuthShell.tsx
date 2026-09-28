@@ -1,5 +1,6 @@
 import Strands from '@/components/Strands'
 import ElectricBorder from '@/components/ElectricBorder'
+import { ACCENT } from '@/lib/theme'
 
 // background, headline and card shared by the auth pages
 export default function AuthShell({ children }: { children: React.ReactNode }) {
@@ -31,7 +32,7 @@ export default function AuthShell({ children }: { children: React.ReactNode }) {
       </div>
 
       <ElectricBorder
-        color="#c99a5b"
+        color={ACCENT}
         speed={0.6}
         chaos={0.08}
         borderRadius={16}

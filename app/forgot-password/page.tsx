@@ -41,7 +41,7 @@ export default function ForgotPasswordPage() {
 
       {sentTo ? (
         <p className="text-sm text-bone" role="status">
-          If an account exists for <span className="text-[#c99a5b]">{sentTo}</span>, we&apos;ve sent a link
+          If an account exists for <span className="text-accent">{sentTo}</span>, we&apos;ve sent a link
           to reset the password. It can take a minute to arrive, so check spam too.
         </p>
       ) : (
@@ -59,7 +59,7 @@ export default function ForgotPasswordPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-[#c99a5b] text-obsidian rounded px-3 py-2 disabled:opacity-50 hover:opacity-90 transition-opacity"
+            className="w-full bg-accent text-obsidian rounded px-3 py-2 disabled:opacity-50 hover:opacity-90 transition-opacity"
           >
             {loading ? 'Sending…' : 'Send reset link'}
           </button>
@@ -67,7 +67,7 @@ export default function ForgotPasswordPage() {
       )}
 
       <p className="text-sm text-center text-fog">
-        <a href="/login" className="text-[#c99a5b] underline">
+        <a href="/login" className="text-accent underline">
           Back to log in
         </a>
       </p>
