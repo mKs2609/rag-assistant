@@ -1,6 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import EvalTrend from './eval-trend'
+import type { EvalRun } from '@/lib/trend'
 
 interface Document {
   id: string
@@ -45,6 +47,7 @@ export default function EvalPanel({ documents }: { documents: Document[] }) {
   const [runningId, setRunningId] = useState<string | null>(null)
   const [results, setResults] = useState<Record<string, EvalResult>>({})
   const [error, setError] = useState('')
+  const [runs, setRuns] = useState<EvalRun[]>([])
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
 
   const anyRunning = runningAll || runningId !== null
@@ -126,6 +129,30 @@ export default function EvalPanel({ documents }: { documents: Document[] }) {
     loadQuestions()
   }
 
+  // same shape as the questions loader above: fetch outside, apply inside a cancel guard
+  async function requestRuns(): Promise<EvalRun[] | null> {
+    const res = await fetch('/api/eval/runs').catch(() => null)
+    if (!res || !res.ok) return null
+    const data = await res.json().catch(() => null)
+    return (data?.runs as EvalRun[]) ?? null
+  }
+
+  function loadRuns() {
+    return requestRuns().then((list) => {
+      if (list) setRuns(list)
+    })
+  }
+
+  useEffect(() => {
+    let cancelled = false
+    requestRuns().then((list) => {
+      if (!cancelled && list) setRuns(list)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   async function handleRunAll() {
     setRunningAll(true)
     setError('')
@@ -145,6 +172,8 @@ export default function EvalPanel({ documents }: { documents: Document[] }) {
       next[r.questionId] = r
     }
     setResults((prev) => ({ ...prev, ...next }))
+    // the run was just recorded, so the trend has one more point
+    loadRuns()
   }
 
   async function handleRunOne(questionId: string) {
@@ -301,6 +330,8 @@ export default function EvalPanel({ documents }: { documents: Document[] }) {
           ))}
         </ul>
       </div>
+
+      <EvalTrend runs={runs} />
 
       {visibleResults.length > 0 && (
         <div className="space-y-3">

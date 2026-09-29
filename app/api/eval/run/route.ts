@@ -170,5 +170,21 @@ export async function POST(request: Request) {
   const retrievalScore = scored.length ? scored.filter((r) => r.retrievalHit).length / scored.length : null
   const answerScore = scored.length ? scored.filter((r) => r.answerCorrect).length / scored.length : null
 
+  // kept so the scores can be compared over time instead of vanishing on reload.
+  // only a full run goes on the trend, a single question is not comparable with the rest.
+  const { error: runError } = await createAdminClient().from('eval_runs').insert({
+    tenant_id: profile.tenant_id,
+    user_id: user.id,
+    retrieval_accuracy: retrievalScore,
+    answer_accuracy: answerScore,
+    scored_count: scored.length,
+    skipped_count: results.length - scored.length,
+    is_full_run: !questionId,
+  })
+  if (runError) {
+    // the scores are still worth returning, so report the run rather than failing it
+    console.error('Failed to record eval run scores:', runError.message)
+  }
+
   return NextResponse.json({ results, retrievalScore, answerScore })
 }
