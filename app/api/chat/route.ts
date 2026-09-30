@@ -186,10 +186,17 @@ export async function POST(request: Request) {
       // search runs inside the stream so the client can show progress
       send({ type: 'status', status: 'Searching your documents…' })
 
+      // measured per stage, so a slow answer can be blamed on the right thing
+      const timings = { embed: 0, search: 0, model: 0, total: 0 }
+      const startedAt = Date.now()
+
       let matches: { id: string; document_id: string; content: string; filename: string }[] = []
       try {
+        const embedStartedAt = Date.now()
         const queryEmbedding = await embedQuery(message)
+        timings.embed = Date.now() - embedStartedAt
 
+        const searchStartedAt = Date.now()
         const [vectorResult, keywordResult] = await Promise.all([
           supabase.rpc('match_document_chunks', {
             query_embedding: queryEmbedding,
@@ -204,6 +211,8 @@ export async function POST(request: Request) {
             filter_document_ids: scopedDocumentIds,
           }),
         ])
+
+        timings.search = Date.now() - searchStartedAt
 
         if (vectorResult.error) throw new Error(vectorResult.error.message)
         if (keywordResult.error) console.error('Keyword search failed:', keywordResult.error.message)
@@ -253,6 +262,7 @@ ${context}`
       })
 
       let fullText = ''
+      const modelStartedAt = Date.now()
 
       try {
         const geminiRes = await callGemini(
@@ -306,6 +316,8 @@ ${context}`
         return
       }
 
+      timings.model = Date.now() - modelStartedAt
+
       // the model supplies chart numbers, so check each one against the full passage it
       // claims to come from and record the verdict in the answer before it is saved
       const answer = verifyChartsIn(fullText || 'No response generated.', matches.map((m) => m.content))
@@ -345,12 +357,20 @@ ${context}`
         .select('id')
         .single()
 
+      timings.total = Date.now() - startedAt
+      // one line per question, so slow answers can be traced to a stage rather than guessed at
+      console.log(
+        `chat timings: embed ${timings.embed}ms, search ${timings.search}ms, ` +
+        `model ${timings.model}ms, total ${timings.total}ms, passages ${matches.length}`
+      )
+
       send({
         type: 'done',
         conversationId: finalConvoId,
         sources,
         userMessageId,
         assistantMessageId: assistantMessage?.id ?? null,
+        timings,
       })
 
       controller.close()

@@ -24,6 +24,7 @@ interface Message {
   content: string
   sources?: Source[]
   status?: string
+  timings?: { embed: number; search: number; model: number; total: number }
 }
 
 type StreamEvent =
@@ -35,6 +36,7 @@ type StreamEvent =
       sources: Source[]
       userMessageId: string
       assistantMessageId: string | null
+      timings?: { embed: number; search: number; model: number; total: number }
     }
   | { type: 'error'; error?: string }
 
@@ -271,7 +273,7 @@ export default function ChatBox({
               return copy
             })
           } else if (event.type === 'done') {
-            const { sources, userMessageId, assistantMessageId } = event
+            const { sources, userMessageId, assistantMessageId, timings } = event
             onConversationChange(event.conversationId)
             setMessages((prev) => {
               const copy = [...prev]
@@ -280,6 +282,7 @@ export default function ChatBox({
                 ...last,
                 sources,
                 status: undefined,
+                timings,
                 id: assistantMessageId ?? undefined,
                 userId: currentUserId,
               }
@@ -441,6 +444,18 @@ export default function ChatBox({
                   ) : (
                     <div className="flex-1 min-w-0">
                       <RichText text={m.content} />
+                      {m.timings && (
+                        <p
+                          className="text-[11px] text-pewter mt-2"
+                          title={`Embedding the question ${m.timings.embed}ms, searching ${m.timings.search}ms, model ${m.timings.model}ms`}
+                        >
+                          Answered in {(m.timings.total / 1000).toFixed(1)}s
+                          <span className="text-fog">
+                            {' '}· search {m.timings.embed + m.timings.search}ms · model{' '}
+                            {(m.timings.model / 1000).toFixed(1)}s
+                          </span>
+                        </p>
+                      )}
                     </div>
                   )}
                   {m.role === 'assistant' && !isEmptyAssistantPlaceholder && speechSupported && (
