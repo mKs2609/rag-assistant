@@ -32,6 +32,9 @@ Most RAG tutorials stop at: embed one PDF, run a vector search, paste the result
 - Per-conversation document scoping, with an inline picker to attach more documents mid-chat
 - Streaming answers with live progress: searching, how many passages were found, then writing
 - Citation grounding checks, saved with the answer so they survive a reload
+- Answers render as real markdown: headings, tables, bulleted and numbered lists, code blocks
+- Charts when an answer compares several numbers, with every value checked against the passage it came from
+- Each answer shows how long it took, split by retrieval and model
 - Delete a question and its answer, with failed sends cleaned up automatically
 - Voice input and read-aloud using the browser's built-in speech APIs
 - Shared chats show who asked each question
@@ -47,6 +50,7 @@ Most RAG tutorials stop at: embed one PDF, run a vector search, paste the result
 - Save question and answer pairs with an expected document and expected keywords
 - Score retrieval accuracy and answer accuracy, for the whole set or one question
 - Questions that fail because the model was unavailable are excluded from the score
+- Every full run is stored, so the panel charts accuracy across runs instead of only the latest
 
 **Documents**
 - PDF, TXT and MD up to 10MB, uploaded straight from the browser to storage
@@ -85,6 +89,8 @@ flowchart TD
 | Retrieval | Top 5 by vector similarity plus top 5 by full-text search, merged and deduped to 6 |
 | Conversation memory | The last 10 messages are replayed to the model |
 | Citation check | A citation is verified when at least 30% of the sentence's significant words appear in the cited chunk |
+| Chart check | Each data point must name a source, and both its number and its label must appear in that passage |
+| Keyword index | A GIN index on `to_tsvector('english', content)`, without which every search scans every chunk |
 | Rate limits | Chat 15 per 5 min, uploads 10 per 10 min, evaluations 5 per 10 min, signups 5 per hour per IP |
 
 ## Security
@@ -114,6 +120,10 @@ flowchart TD
 **OCR only when it's needed.** Scanned PDFs hold images rather than text, so extraction returned nothing and the upload failed. Rather than add an OCR engine to the serverless function, which is slow and heavy, the pipeline falls back to Gemini when a PDF yields almost no text and asks it to transcribe the pages. Normal PDFs never pay that cost, and it reuses the API key that was already there.
 
 **Long scans, measured rather than guessed.** Splitting a scan into 10-page requests and sending them in parallel looked like the obvious speed-up. Measured on a 23-page scan, it was the opposite: 34 seconds one group at a time versus 252 seconds with three in parallel, because the free Gemini tier queues parallel requests from one key. So groups run one at a time, processing has a 300 second budget, and OCR checks the clock before each group. If time is about to run out it stops and marks the document failed, instead of the platform killing the function and leaving it stuck on "processing".
+
+**The index that was never there.** Keyword search filtered on `to_tsvector('english', content)` with no index, so every question sequentially scanned every chunk and built the vector twice per row. Measured on 20,000 chunks, a search took 1716ms round trip, about 1400ms of it query time. A GIN index on that expression took it to 311ms round trip and about 10ms of query time, and needed no change to the search function. A first attempt used a stored generated column instead, which rewrites the table and therefore rebuilds the pgvector index, and that rebuild needs more memory than a small instance has. An expression index touches nothing else.
+
+**Charts are verified like citations.** A fabricated chart is more convincing than a fabricated sentence, because people read a bar as data rather than as a claim. The model emits chart data as JSON naming the source of each point, and the server checks both the number and the label against that passage before anything is drawn. Points that fail are drawn as a dashed outline and flagged, not silently dropped. Verification runs on the server because the browser only receives a 150 character snippet of each source, far too little to check a number against.
 
 **Handling a busy model.** Gemini returns 503 when it is under load, and a single attempt failed often enough to be a problem. Requests now retry with backoff before giving up, and the user sees a short message rather than a raw API error. A failed question is removed from the chat instead of being left unanswered.
 
@@ -191,6 +201,10 @@ lib/
   __tests__/     # unit tests for the pure functions
   documents/     # chunking, embedding and processing pipeline
   citations.ts   # citation grounding check
+  charts.ts      # chart grounding, and writing verdicts back into an answer
+  markdown.ts    # parses an answer into blocks, including charts
+  trend.ts       # geometry for the evaluation accuracy chart
+  theme.ts       # the accent colour as a value, for props that need one
   ocr.ts         # OCR fallback for scanned PDFs
   gemini.ts      # Gemini calls with retry on busy responses
   hooks/         # speech recognition and synthesis
@@ -206,6 +220,9 @@ e2e/             # playwright end-to-end tests
 
 ## Roadmap
 
+- Reranking the retrieved passages with a second model, measured through the evaluation harness
+- Citation deep links, by storing a page number and offset on each chunk
+- Multilingual retrieval, choosing the text search configuration per document language
 - Model-based citation verification as an optional higher-fidelity mode
 - Support for embedding providers beyond Voyage AI
 

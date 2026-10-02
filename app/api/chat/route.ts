@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { callGemini, geminiErrorMessage } from '@/lib/gemini'
-import { isCitationGrounded } from '@/lib/citations'
+import { isCitationGrounded, stripFencedBlocks } from '@/lib/citations'
 import { verifyChartsIn } from '@/lib/charts'
 
 async function embedQuery(text: string): Promise<number[]> {
@@ -323,7 +323,8 @@ ${context}`
       const answer = verifyChartsIn(fullText || 'No response generated.', matches.map((m) => m.content))
 
       const verifiedFlags: Record<number, boolean> = {}
-      const sentences = answer.split(/(?<=[.!?])\s+/)
+      // chart json is not prose, and counting it would fail correct citations
+      const sentences = stripFencedBlocks(answer).split(/(?<=[.!?])\s+/)
 
       for (const sentence of sentences) {
         const citationsInSentence = [...sentence.matchAll(/\[(\d+)\]/g)].map((m) => parseInt(m[1], 10))

@@ -20,6 +20,16 @@ export function significantWords(text: string): Set<string> {
   )
 }
 
+/**
+ * Removes fenced blocks before a citation is checked. An answer can contain a chart block,
+ * and its json keys (kind, title, points, label, value) are not prose: counted as claim words
+ * they halve the overlap and fail a citation that is actually correct. Citations live in the
+ * prose, so the blocks can go.
+ */
+export function stripFencedBlocks(text: string): string {
+  return text.replace(/```[\s\S]*?(?:```|$)/g, ' ')
+}
+
 export function isCitationGrounded(claimSentence: string, sourceContent: string): boolean {
   const claimWords = significantWords(claimSentence)
   if (claimWords.size === 0) return true

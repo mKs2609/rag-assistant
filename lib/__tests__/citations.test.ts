@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { significantWords, isCitationGrounded } from '@/lib/citations'
+import { significantWords, isCitationGrounded, stripFencedBlocks } from '@/lib/citations'
 
 describe('significantWords', () => {
   it('drops stopwords and words of two characters or fewer', () => {
@@ -70,5 +70,52 @@ describe('isCitationGrounded', () => {
 
   it('treats an empty source as ungrounded', () => {
     expect(isCitationGrounded('The certificate was issued in March.', '')).toBe(false)
+  })
+})
+
+describe('stripFencedBlocks', () => {
+  it('removes a chart block', () => {
+    const out = stripFencedBlocks('Before.\n```chart\n{"points":[]}\n```\nAfter.')
+    expect(out).not.toContain('points')
+    expect(out).toContain('Before.')
+    expect(out).toContain('After.')
+  })
+
+  it('removes an ordinary code block too', () => {
+    expect(stripFencedBlocks('Try\n```sql\nselect 1\n```\nthen stop')).not.toContain('select')
+  })
+
+  it('removes several blocks in one answer', () => {
+    const out = stripFencedBlocks('a\n```\none\n```\nb\n```\ntwo\n```\nc')
+    expect(out).not.toContain('one')
+    expect(out).not.toContain('two')
+  })
+
+  it('removes an unterminated block, which happens mid stream', () => {
+    expect(stripFencedBlocks('Here it is\n```chart\n{"kind":"bar"')).not.toContain('kind')
+  })
+
+  it('leaves an answer with no fences unchanged', () => {
+    expect(stripFencedBlocks('Just prose [1].')).toBe('Just prose [1].')
+  })
+
+  // the case from a real answer: bullets have no full stops, so the whole answer is one
+  // sentence, and the chart json dragged a correct citation under the threshold
+  it('rescues a correct citation that the chart json would have failed', () => {
+    const source =
+      'Engineering has 42 people. Support has 17 people. Design has 9 people. Operations has 24 people.'
+    const answer = [
+      'Based on the reference material, here is the number of people in each team [1]:',
+      '*   **Engineering:** 42 people [1]',
+      '*   **Operations:** 24 people [1]',
+      '*   **Support:** 17 people [1]',
+      '*   **Design:** 9 people [1]',
+      '```chart',
+      '{"kind":"bar","title":"Team Sizes","unit":"people","points":[{"label":"Engineering","value":42,"source":1,"verified":true}]}',
+      '```',
+    ].join('\n')
+
+    expect(isCitationGrounded(answer, source)).toBe(false)
+    expect(isCitationGrounded(stripFencedBlocks(answer), source)).toBe(true)
   })
 })
