@@ -3,21 +3,34 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { callGemini, geminiErrorMessage } from '@/lib/gemini'
 
+// a full set is one gemini call per question, which needs more than the default
+export const maxDuration = 300
+
 const EVAL_RATE_LIMIT_MAX = 5
 const EVAL_RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000
 
-async function embedQuery(text: string): Promise<number[]> {
-  const res = await fetch('https://api.voyageai.com/v1/embeddings', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${process.env.VOYAGE_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ input: [text], model: 'voyage-3.5', input_type: 'query' }),
-  })
-  if (!res.ok) throw new Error(`Voyage API error (${res.status}): ${await res.text()}`)
-  const data = await res.json()
-  return data.data[0].embedding
+// every question is embedded in one request. embedding them one at a time meant a set of
+// twenty questions made twenty requests, and the free tier allows three a minute, so all but
+// the first few failed with 429. voyage accepts up to 128 inputs per request.
+const EMBED_BATCH = 128
+
+async function embedQueries(texts: string[]): Promise<number[][]> {
+  const out: number[][] = []
+  for (let start = 0; start < texts.length; start += EMBED_BATCH) {
+    const batch = texts.slice(start, start + EMBED_BATCH)
+    const res = await fetch('https://api.voyageai.com/v1/embeddings', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${process.env.VOYAGE_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ input: batch, model: 'voyage-3.5', input_type: 'query' }),
+    })
+    if (!res.ok) throw new Error(`Voyage API error (${res.status}): ${await res.text()}`)
+    const data = await res.json()
+    for (const row of data.data) out.push(row.embedding)
+  }
+  return out
 }
 
 function significantWords(text: string): Set<string> {
@@ -97,14 +110,26 @@ export async function POST(request: Request) {
 
   const results = []
 
+  // embed everything up front, so the rest of the run makes no further voyage requests
+  let embeddings: number[][]
+  try {
+    embeddings = await embedQueries(questions.map((q) => q.question))
+  } catch (err) {
+    console.error('Could not embed the evaluation questions:', err)
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : 'Could not embed the questions' },
+      { status: 502 }
+    )
+  }
+
   for (let i = 0; i < questions.length; i++) {
     const q = questions[i]
-    // avoid voyage free tier rate limit
+    // the model is the remaining limit, so leave a gap between questions
     if (i > 0) {
       await sleep(1200)
     }
     try {
-      const queryEmbedding = await embedQuery(q.question)
+      const queryEmbedding = embeddings[i]
       const { data: matches } = await supabase.rpc('match_document_chunks', {
         query_embedding: queryEmbedding,
         match_tenant_id: profile.tenant_id,

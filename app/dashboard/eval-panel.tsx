@@ -209,6 +209,7 @@ export default function EvalPanel({ documents }: { documents: Document[] }) {
 
   // questions that errored (e.g. model busy) still show, but aren't scored
   const scoredResults = visibleResults.filter((r) => !r.error)
+  const skippedCount = visibleResults.length - scoredResults.length
 
   const retrievalScore = scoredResults.length
     ? scoredResults.filter((r) => r.retrievalHit).length / scoredResults.length
@@ -349,6 +350,19 @@ export default function EvalPanel({ documents }: { documents: Document[] }) {
               </p>
             </div>
           </div>
+
+          {/* a score from 2 of 22 questions is not the same claim as a score from 22, and
+              without this the headline number looks identical in both cases */}
+          <p className={`text-xs ${skippedCount > 0 ? 'text-red-400' : 'text-bone/70'}`}>
+            Scored {scoredResults.length} of {visibleResults.length} question
+            {visibleResults.length === 1 ? '' : 's'}
+            {skippedCount > 0 && (
+              <>
+                {' '}· {skippedCount} could not be scored because a service was unavailable, so
+                the percentages above describe only the {scoredResults.length} that ran
+              </>
+            )}
+          </p>
 
           <div className="space-y-2">
             {visibleResults.map((r) => (

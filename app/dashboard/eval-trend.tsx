@@ -69,6 +69,9 @@ export default function EvalTrend({ runs }: { runs: EvalRun[] }) {
         <p className="text-xs text-bone/70">
           Latest: {formatPercent(latest.retrievalAccuracy)} retrieval,{' '}
           {formatPercent(latest.answerAccuracy)} answer
+          <span className={latest.skippedCount > 0 ? 'text-red-400' : ''}>
+            {' '}· from {latest.scoredCount} of {latest.scoredCount + latest.skippedCount}
+          </span>
         </p>
       </div>
 
