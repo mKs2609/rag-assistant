@@ -37,6 +37,7 @@ type StreamEvent =
       userMessageId: string
       assistantMessageId: string | null
       timings?: { embed: number; search: number; model: number; total: number }
+      content?: string
     }
   | { type: 'error'; error?: string }
 
@@ -273,13 +274,15 @@ export default function ChatBox({
               return copy
             })
           } else if (event.type === 'done') {
-            const { sources, userMessageId, assistantMessageId, timings } = event
+            const { sources, userMessageId, assistantMessageId, timings, content } = event
             onConversationChange(event.conversationId)
             setMessages((prev) => {
               const copy = [...prev]
               const last = copy[copy.length - 1]
               copy[copy.length - 1] = {
                 ...last,
+                // the server's copy carries the chart verdicts, the streamed text does not
+                content: content ?? last.content,
                 sources,
                 status: undefined,
                 timings,

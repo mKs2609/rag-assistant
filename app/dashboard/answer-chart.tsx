@@ -1,5 +1,5 @@
 import { ACCENT } from '@/lib/theme'
-import { chartIsFullyGrounded } from '@/lib/charts'
+import { groundingState } from '@/lib/charts'
 import type { Chart } from '@/lib/markdown'
 
 const HEIGHT = 170
@@ -30,7 +30,7 @@ export default function AnswerChart({ chart }: { chart: Chart }) {
   const bottom = lowest < 0 ? -niceCeiling(Math.abs(lowest)) : 0
   const span = top - bottom || 1
   const zeroLine = (top / span) * HEIGHT
-  const grounded = chartIsFullyGrounded(chart)
+  const state = groundingState(chart)
 
   return (
     <figure className="my-4 bg-obsidian/40 rounded-lg p-4">
@@ -86,11 +86,13 @@ export default function AnswerChart({ chart }: { chart: Chart }) {
         ))}
       </div>
 
-      <p className={`text-[11px] mt-3 ${grounded ? 'text-fog' : 'text-red-400'}`}>
-        {grounded
-          ? 'Every value above was found in the passages this answer cites.'
-          : 'Values marked * were not found in the passage they were attributed to. Check those against the source.'}
-      </p>
+      {state !== 'unknown' && (
+        <p className={`text-[11px] mt-3 ${state === 'verified' ? 'text-fog' : 'text-red-400'}`}>
+          {state === 'verified'
+            ? 'Every value above was found in the passages this answer cites.'
+            : 'Values marked * were not found in the passage they were attributed to. Check those against the source.'}
+        </p>
+      )}
     </figure>
   )
 }

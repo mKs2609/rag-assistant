@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { numberAppearsIn, verifyChart, chartIsFullyGrounded, verifyChartsIn } from '@/lib/charts'
+import { numberAppearsIn, verifyChart, chartIsFullyGrounded, verifyChartsIn, groundingState } from '@/lib/charts'
 import { parseChart, parseBlocks } from '@/lib/markdown'
 import type { Chart } from '@/lib/markdown'
 
@@ -186,5 +186,44 @@ describe('verifyChartsIn', () => {
     const out = verifyChartsIn(two, PASSAGES)
     expect(out.match(/"verified":true/g)).toHaveLength(2)
     expect(out.match(/"verified":false/g)).toHaveLength(2)
+  })
+})
+
+describe('groundingState', () => {
+  it('says verified only when every point has passed', () => {
+    expect(groundingState(chart([
+      { label: 'a', value: 1, verified: true },
+      { label: 'b', value: 2, verified: true },
+    ]))).toBe('verified')
+  })
+
+  it('says failed when any point failed', () => {
+    expect(groundingState(chart([
+      { label: 'a', value: 1, verified: true },
+      { label: 'b', value: 2, verified: false },
+    ]))).toBe('failed')
+  })
+
+  // the streamed text has no verdicts yet, and claiming values were "not found"
+  // at that moment would be a false accusation
+  it('says unknown when no verdict has been written', () => {
+    expect(groundingState(chart([
+      { label: 'a', value: 1 },
+      { label: 'b', value: 2 },
+    ]))).toBe('unknown')
+  })
+
+  it('says unknown when only some points carry a verdict', () => {
+    expect(groundingState(chart([
+      { label: 'a', value: 1, verified: true },
+      { label: 'b', value: 2 },
+    ]))).toBe('unknown')
+  })
+
+  it('still reports a failure when the rest have no verdict', () => {
+    expect(groundingState(chart([
+      { label: 'a', value: 1 },
+      { label: 'b', value: 2, verified: false },
+    ]))).toBe('failed')
   })
 })

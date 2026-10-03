@@ -66,6 +66,17 @@ export function chartIsFullyGrounded(chart: Chart): boolean {
 }
 
 /**
+ * What the chart should say about itself. A point with no verdict is not the same as a point
+ * that failed: while an answer is still streaming the verdicts have not been written yet, and
+ * claiming values "were not found" at that moment is simply wrong.
+ */
+export function groundingState(chart: Chart): 'verified' | 'failed' | 'unknown' {
+  if (chart.points.some((point) => point.verified === false)) return 'failed'
+  if (chart.points.every((point) => point.verified === true)) return 'verified'
+  return 'unknown'
+}
+
+/**
  * Finds every chart block in an answer, checks its points against the full passages, and
  * writes the verdict back into the block. This runs on the server, where the whole passage
  * is available; the browser only ever sees a short snippet, which is too little to check against.

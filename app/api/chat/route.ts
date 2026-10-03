@@ -372,6 +372,9 @@ ${context}`
         userMessageId,
         assistantMessageId: assistantMessage?.id ?? null,
         timings,
+        // the streamed tokens are the model's raw text. this is the saved version, with the
+        // chart verdicts written in, so the browser shows what was actually checked.
+        content: answer,
       })
 
       controller.close()
