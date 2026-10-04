@@ -247,3 +247,36 @@ export function toSpokenText(text: string): string {
 export function inlineToText(content: Inline[]): string {
   return content.map((part) => part.text).join('')
 }
+
+// the answer as plain text to paste somewhere else. unlike toSpokenText this keeps the
+// line breaks and the [1] markers, because a pasted answer is read, not heard.
+export function toCopyText(text: string): string {
+  return parseBlocks(text)
+    .map((block) => {
+      switch (block.type) {
+        case 'code':
+          return '```' + block.language + '\n' + block.text + '\n```'
+        case 'chart':
+          return [
+            block.chart.title,
+            ...block.chart.points.map(
+              (p) => `- ${p.label}: ${p.value}${block.chart.unit ? ' ' + block.chart.unit : ''}`
+            ),
+          ]
+            .filter((line) => line !== '')
+            .join('\n')
+        case 'table':
+          return [block.head, ...block.rows]
+            .map((row) => row.map(inlineToText).join(' | '))
+            .join('\n')
+        case 'bullets':
+          return block.items.map((item) => `- ${inlineToText(item)}`).join('\n')
+        case 'numbers':
+          return block.items.map((item, i) => `${i + 1}. ${inlineToText(item)}`).join('\n')
+        default:
+          return inlineToText(block.content)
+      }
+    })
+    .filter((part) => part.trim() !== '')
+    .join('\n\n')
+}

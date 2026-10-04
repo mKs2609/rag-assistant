@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest'
-import { parseBlocks, parseInline, inlineToText, toSpokenText, type Block } from '@/lib/markdown'
+import {
+  parseBlocks,
+  parseInline,
+  inlineToText,
+  toSpokenText,
+  toCopyText,
+  type Block,
+} from '@/lib/markdown'
 
 function textOf(block: Block): string {
   if (block.type === 'paragraph' || block.type === 'heading') return inlineToText(block.content)
@@ -146,5 +153,53 @@ describe('toSpokenText', () => {
 
   it('separates bullets so they do not run together', () => {
     expect(toSpokenText('* one\n* two')).toBe('one. two')
+  })
+})
+
+describe('toCopyText', () => {
+  it('keeps the citation markers, because they are the point of the answer', () => {
+    expect(toCopyText('The code is 9977388 [1].')).toBe('The code is 9977388 [1].')
+  })
+
+  it('keeps bullets on their own lines rather than running them into a sentence', () => {
+    expect(toCopyText('* one\n* two')).toBe('- one\n- two')
+  })
+
+  it('numbers an ordered list from one, whatever the source numbering', () => {
+    expect(toCopyText('3. first\n7. second')).toBe('1. first\n2. second')
+  })
+
+  it('separates blocks with a blank line', () => {
+    expect(toCopyText('## Heading\n\nA sentence.')).toBe('Heading\n\nA sentence.')
+  })
+
+  it('keeps a code block fenced, so pasted code stays code', () => {
+    expect(toCopyText('```sql\nselect 1\n```')).toBe('```sql\nselect 1\n```')
+  })
+
+  it('writes a chart out as readable lines, since the drawing cannot be pasted', () => {
+    const chart = [
+      '```chart',
+      JSON.stringify({
+        kind: 'bar',
+        title: 'Team size',
+        unit: 'people',
+        points: [
+          { label: 'Engineering', value: 12 },
+          { label: 'Design', value: 4 },
+        ],
+      }),
+      '```',
+    ].join('\n')
+    expect(toCopyText(chart)).toBe('Team size\n- Engineering: 12 people\n- Design: 4 people')
+  })
+
+  it('lays a table out row by row', () => {
+    const table = '| Name | Count |\n|---|---|\n| Design | 4 |'
+    expect(toCopyText(table)).toBe('Name | Count\nDesign | 4')
+  })
+
+  it('drops the markdown markers from bold and italic text', () => {
+    expect(toCopyText('A **bold** word.')).toBe('A bold word.')
   })
 })

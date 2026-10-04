@@ -35,6 +35,7 @@ Most RAG tutorials stop at: embed one PDF, run a vector search, paste the result
 - Answers render as real markdown: headings, tables, bulleted and numbered lists, code blocks
 - Charts when an answer compares several numbers, with every value checked against the passage it came from
 - Each answer shows how long it took, split by retrieval and model
+- Copy, re-ask, edit or delete any message from a row of buttons under it, with the time it was sent
 - Delete a question and its answer, with failed sends cleaned up automatically
 - Voice input and read-aloud using the browser's built-in speech APIs
 - Shared chats show who asked each question
@@ -204,6 +205,8 @@ lib/
   charts.ts      # chart grounding, and writing verdicts back into an answer
   markdown.ts    # parses an answer into blocks, including charts
   trend.ts       # geometry for the evaluation accuracy chart
+  clipboard.ts   # copy to the clipboard, with a fallback for browsers without the API
+  time.ts        # short timestamps for the message buttons
   theme.ts       # the accent colour as a value, for props that need one
   ocr.ts         # OCR fallback for scanned PDFs
   gemini.ts      # Gemini calls with retry on busy responses

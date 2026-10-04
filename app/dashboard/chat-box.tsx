@@ -6,9 +6,19 @@ import { createClient } from '@/lib/supabase/client'
 import { uploadDocumentDirect } from '@/lib/documents/upload-client'
 import { useSpeechRecognition } from '@/lib/hooks/useSpeechRecognition'
 import { useSpeechSynthesis } from '@/lib/hooks/useSpeechSynthesis'
-import { toSpokenText } from '@/lib/markdown'
+import { toSpokenText, toCopyText } from '@/lib/markdown'
 import AttachMenu from './attach-menu'
 import RichText from './rich-text'
+import {
+  ActionButton,
+  ActionRow,
+  CopyButton,
+  EditIcon,
+  RetryIcon,
+  SpeakerIcon,
+  Timestamp,
+  TrashIcon,
+} from './message-actions'
 
 interface Source {
   filename: string
@@ -22,6 +32,7 @@ interface Message {
   senderName?: string | null
   role: 'user' | 'assistant'
   content: string
+  createdAt?: string
   sources?: Source[]
   status?: string
   timings?: { embed: number; search: number; model: number; total: number }
@@ -86,6 +97,7 @@ export default function ChatBox({
   const supabase = createClient()
   const router = useRouter()
   const bottomRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
 
   const { isListening, isSupported: micSupported, startListening, stopListening } =
     useSpeechRecognition(setInput)
@@ -147,7 +159,7 @@ export default function ChatBox({
       setMessagesLoading(true)
       const { data } = await supabase
         .from('messages')
-        .select('id, user_id, role, content, sources, profiles(display_name, email)')
+        .select('id, user_id, role, content, sources, created_at, profiles(display_name, email)')
         .eq('conversation_id', activeConversationId)
         .order('created_at', { ascending: true })
 
@@ -160,6 +172,7 @@ export default function ChatBox({
           senderName: sender ? sender.display_name || sender.email : null,
           role: m.role as 'user' | 'assistant',
           content: m.content as string,
+          createdAt: m.created_at as string,
           sources: (m.sources as Source[] | null) ?? undefined,
           }
         })
@@ -187,7 +200,7 @@ export default function ChatBox({
     }
   }
 
-  async function handleSend(e: React.FormEvent) {
+  function handleSend(e: React.FormEvent) {
     e.preventDefault()
     if (!input.trim() || loading) return
 
@@ -195,12 +208,24 @@ export default function ChatBox({
       stopListening()
     }
 
-    const userMessage = input
+    const question = input
     setInput('')
+    ask(question)
+  }
+
+  // put a past question back in the box so it can be reworded before asking again
+  function handleEdit(question: string) {
+    setInput(question)
+    inputRef.current?.focus()
+  }
+
+  async function ask(userMessage: string) {
+    if (!userMessage.trim() || loading) return
+
     // show the question and a status placeholder right away
     setMessages((prev) => [
       ...prev,
-      { role: 'user', content: userMessage, userId: currentUserId },
+      { role: 'user', content: userMessage, userId: currentUserId, createdAt: new Date().toISOString() },
       { role: 'assistant', content: '', status: 'Sending…' },
     ])
     setLoading(true)
@@ -288,6 +313,7 @@ export default function ChatBox({
                 timings,
                 id: assistantMessageId ?? undefined,
                 userId: currentUserId,
+                createdAt: new Date().toISOString(),
               }
               copy[copy.length - 2] = { ...copy[copy.length - 2], id: userMessageId }
               return copy
@@ -419,7 +445,7 @@ export default function ChatBox({
             <div
               key={i}
               data-testid={m.role === 'user' ? 'user-message' : 'assistant-message'}
-              className={(m.role === 'user' ? 'flex justify-end' : 'flex justify-start') + ' animate-message-in group'}
+              className={(m.role === 'user' ? 'flex justify-end' : 'flex justify-start') + ' animate-message-in'}
             >
               <div className="max-w-[85%] sm:max-w-[70%]">
                 {m.role === 'user' && m.userId && (
@@ -461,58 +487,62 @@ export default function ChatBox({
                       )}
                     </div>
                   )}
-                  {m.role === 'assistant' && !isEmptyAssistantPlaceholder && speechSupported && (
+                </div>
+
+                {confirmDeleteId === m.id ? (
+                  <div className="mt-1 flex justify-end items-center gap-2 text-xs">
+                    <span className="text-pewter">Delete this question and its answer?</span>
                     <button
                       type="button"
-                      onClick={() => (isSpeaking ? stopSpeaking() : speak(toSpokenText(m.content), messageId))}
-                      className="text-pewter hover:text-bone shrink-0 mt-0.5"
-                      aria-label={isSpeaking ? 'Stop reading aloud' : 'Read this message aloud'}
+                      onClick={() => handleDeleteMessage(m.id!)}
+                      disabled={deletingId === m.id}
+                      className="text-red-400 hover:underline disabled:opacity-40"
                     >
-                      {isSpeaking ? (
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                          <rect x="6" y="6" width="12" height="12" />
-                        </svg>
-                      ) : (
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path d="M11 5 6 9H2v6h4l5 4V5z" strokeLinecap="round" strokeLinejoin="round" />
-                          <path d="M15.5 8.5a5 5 0 0 1 0 7" strokeLinecap="round" />
-                        </svg>
-                      )}
+                      {deletingId === m.id ? 'Deleting…' : 'Delete'}
                     </button>
-                  )}
-                </div>
-                {canDelete(m) && !loading && (
-                  <div className="mt-1 flex justify-end gap-2 text-xs">
-                    {confirmDeleteId === m.id ? (
-                      <>
-                        <span className="text-pewter">Delete this question and its answer?</span>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteMessage(m.id!)}
-                          disabled={deletingId === m.id}
-                          className="text-red-400 hover:underline disabled:opacity-40"
-                        >
-                          {deletingId === m.id ? 'Deleting…' : 'Delete'}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setConfirmDeleteId(null)}
-                          className="text-bone/70 hover:text-bone"
-                        >
-                          Cancel
-                        </button>
-                      </>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => setConfirmDeleteId(m.id!)}
-                        className="text-pewter hover:text-red-400 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100 transition-opacity"
-                        aria-label="Delete this message"
-                      >
-                        Delete
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => setConfirmDeleteId(null)}
+                      className="text-bone/70 hover:text-bone"
+                    >
+                      Cancel
+                    </button>
                   </div>
+                ) : m.role === 'user' ? (
+                  <ActionRow align="right">
+                    <Timestamp iso={m.createdAt} />
+                    <ActionButton label="Ask this again" onClick={() => ask(m.content)} disabled={loading}>
+                      <RetryIcon />
+                    </ActionButton>
+                    <ActionButton label="Edit and ask again" onClick={() => handleEdit(m.content)}>
+                      <EditIcon />
+                    </ActionButton>
+                    <CopyButton text={m.content} label="Copy this question" />
+                    {canDelete(m) && !loading && (
+                      <ActionButton label="Delete this message" onClick={() => setConfirmDeleteId(m.id!)} danger>
+                        <TrashIcon />
+                      </ActionButton>
+                    )}
+                  </ActionRow>
+                ) : (
+                  // nothing to copy or read until the answer has finished arriving
+                  !isEmptyAssistantPlaceholder &&
+                  !(loading && i === messages.length - 1) && (
+                    <ActionRow align="left">
+                      <CopyButton text={toCopyText(m.content)} label="Copy this answer" />
+                      {speechSupported && (
+                        <ActionButton
+                          label={isSpeaking ? 'Stop reading aloud' : 'Read this message aloud'}
+                          onClick={() =>
+                            isSpeaking ? stopSpeaking() : speak(toSpokenText(m.content), messageId)
+                          }
+                        >
+                          <SpeakerIcon speaking={isSpeaking} />
+                        </ActionButton>
+                      )}
+                      <Timestamp iso={m.createdAt} />
+                    </ActionRow>
+                  )
                 )}
                 {m.sources && m.sources.length > 0 && (
                   <div className="mt-2 space-y-1.5">
@@ -556,6 +586,7 @@ export default function ChatBox({
               disabled={attaching}
             />
             <input
+              ref={inputRef}
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
