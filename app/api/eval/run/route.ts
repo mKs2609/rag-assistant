@@ -125,6 +125,9 @@ export async function POST(request: Request) {
   // once the day's free quota is gone every later question gets the same answer, so stop
   // asking. twenty questions times three retries is a lot of requests that cannot succeed.
   let modelOutOfQuota = false
+  // google's own wait, captured when the quota first ran out, so every remaining question
+  // repeats the same real figure rather than a rebuilt guess
+  let quotaMessage = ''
 
   for (let i = 0; i < questions.length; i++) {
     const q = questions[i]
@@ -163,7 +166,7 @@ export async function POST(request: Request) {
         retrievalHit,
         answerCorrect: null,
         answer: '',
-        error: searchError || geminiErrorMessage(429, 'per day'),
+        error: searchError || quotaMessage,
       })
       continue
     }
@@ -182,8 +185,12 @@ export async function POST(request: Request) {
       if (!geminiRes.ok) {
         const body = await geminiRes.text()
         console.error(`Gemini error (${geminiRes.status}):`, body)
-        if (geminiFailure(geminiRes.status, body) === 'quota-daily') modelOutOfQuota = true
-        throw new Error(geminiErrorMessage(geminiRes.status, body))
+        const message = geminiErrorMessage(geminiRes.status, body)
+        if (geminiFailure(geminiRes.status, body) === 'quota-daily') {
+          modelOutOfQuota = true
+          quotaMessage = message
+        }
+        throw new Error(message)
       }
 
       const geminiData = await geminiRes.json()
