@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import EvalTrend from './eval-trend'
+import { scoreRun } from '@/lib/eval'
 import type { EvalRun } from '@/lib/trend'
 
 interface Document {
@@ -21,8 +22,9 @@ interface EvalQuestion {
 interface EvalResult {
   questionId: string
   question: string
-  retrievalHit: boolean
-  answerCorrect: boolean
+  // null means it was never measured, which is not the same as getting it wrong
+  retrievalHit: boolean | null
+  answerCorrect: boolean | null
   answer: string
   keywordsFound?: string[]
   keywordsExpected?: string[]
@@ -207,16 +209,10 @@ export default function EvalPanel({ documents }: { documents: Document[] }) {
     .map((q) => results[q.id])
     .filter((r): r is EvalResult => Boolean(r))
 
-  // questions that errored (e.g. model busy) still show, but aren't scored
-  const scoredResults = visibleResults.filter((r) => !r.error)
-  const skippedCount = visibleResults.length - scoredResults.length
-
-  const retrievalScore = scoredResults.length
-    ? scoredResults.filter((r) => r.retrievalHit).length / scoredResults.length
-    : null
-  const answerScore = scoredResults.length
-    ? scoredResults.filter((r) => r.answerCorrect).length / scoredResults.length
-    : null
+  // searching needs no model, so retrieval is usually measured for every question even
+  // when the model was unavailable for most of them. the two coverages differ, and saying
+  // so is the difference between a real result and a number from one lucky question.
+  const score = scoreRun(visibleResults)
 
   return (
     <div className="flex-1 overflow-y-auto thin-scroll px-4 sm:px-8 py-8 space-y-8">
@@ -340,41 +336,43 @@ export default function EvalPanel({ documents }: { documents: Document[] }) {
             <div className="bg-inkwell rounded-lg px-4 py-3 flex-1">
               <p className="text-xs text-bone/70 uppercase tracking-wide">Retrieval accuracy</p>
               <p className="font-display text-3xl text-bone">
-                {retrievalScore !== null ? `${Math.round(retrievalScore * 100)}%` : '—'}
+                {score.retrievalAccuracy !== null
+                  ? `${Math.round(score.retrievalAccuracy * 100)}%`
+                  : '—'}
+              </p>
+              <p className="text-xs text-bone/70">
+                from {score.retrievalScored} of {score.total}
               </p>
             </div>
             <div className="bg-inkwell rounded-lg px-4 py-3 flex-1">
               <p className="text-xs text-bone/70 uppercase tracking-wide">Answer accuracy</p>
               <p className="font-display text-3xl text-bone">
-                {answerScore !== null ? `${Math.round(answerScore * 100)}%` : '—'}
+                {score.answerAccuracy !== null ? `${Math.round(score.answerAccuracy * 100)}%` : '—'}
+              </p>
+              <p className={score.answerScored < score.total ? 'text-xs text-red-400' : 'text-xs text-bone/70'}>
+                from {score.answerScored} of {score.total}
               </p>
             </div>
           </div>
 
           {/* a score from 2 of 22 questions is not the same claim as a score from 22, and
               without this the headline number looks identical in both cases */}
-          <p className={`text-xs ${skippedCount > 0 ? 'text-red-400' : 'text-bone/70'}`}>
-            Scored {scoredResults.length} of {visibleResults.length} question
-            {visibleResults.length === 1 ? '' : 's'}
-            {skippedCount > 0 && (
-              <>
-                {' '}· {skippedCount} could not be scored because a service was unavailable, so
-                the percentages above describe only the {scoredResults.length} that ran
-              </>
-            )}
-          </p>
+          {score.answerScored < score.total && (
+            <p className="text-xs text-red-400">
+              {score.total - score.answerScored} answer
+              {score.total - score.answerScored === 1 ? '' : 's'} could not be scored because the
+              model was unavailable. Searching does not use the model, so retrieval was still
+              measured for {score.retrievalScored} of {score.total}.
+            </p>
+          )}
 
           <div className="space-y-2">
             {visibleResults.map((r) => (
               <div key={r.questionId} className="bg-inkwell rounded-lg px-3 py-2 text-sm space-y-1">
                 <p className="text-bone">{r.question}</p>
                 <div className="flex gap-3 text-xs">
-                  <span className={r.retrievalHit ? 'text-bone' : 'text-red-400'}>
-                    {r.retrievalHit ? '✓ retrieval' : '✗ retrieval'}
-                  </span>
-                  <span className={r.answerCorrect ? 'text-bone' : 'text-red-400'}>
-                    {r.answerCorrect ? '✓ answer' : '✗ answer'}
-                  </span>
+                  <Mark label="retrieval" value={r.retrievalHit} />
+                  <Mark label="answer" value={r.answerCorrect} />
                 </div>
                 {r.error ? (
                   <p className="text-xs text-red-400">{r.error}</p>
@@ -387,5 +385,16 @@ export default function EvalPanel({ documents }: { documents: Document[] }) {
         </div>
       )}
     </div>
+  )
+}
+
+// a question the model never reached is not a question the system got wrong, so it reads
+// as "not scored" rather than as a red cross next to the ones that genuinely failed
+function Mark({ label, value }: { label: string; value: boolean | null }) {
+  if (value === null) return <span className="text-bone/45">— {label} not scored</span>
+  return (
+    <span className={value ? 'text-bone' : 'text-red-400'}>
+      {value ? '✓' : '✗'} {label}
+    </span>
   )
 }

@@ -21,7 +21,7 @@ export async function GET() {
   // row level security also limits this to the caller's workspace
   const { data, error } = await supabase
     .from('eval_runs')
-    .select('id, retrieval_accuracy, answer_accuracy, scored_count, skipped_count, created_at')
+    .select('id, retrieval_accuracy, answer_accuracy, retrieval_scored_count, scored_count, skipped_count, created_at')
     .eq('tenant_id', profile.tenant_id)
     .eq('is_full_run', true)
     .order('created_at', { ascending: false })
@@ -40,6 +40,7 @@ export async function GET() {
       id: run.id,
       retrievalAccuracy: run.retrieval_accuracy === null ? null : Number(run.retrieval_accuracy),
       answerAccuracy: run.answer_accuracy === null ? null : Number(run.answer_accuracy),
+      retrievalScoredCount: run.retrieval_scored_count ?? run.scored_count,
       scoredCount: run.scored_count,
       skippedCount: run.skipped_count,
       createdAt: run.created_at,

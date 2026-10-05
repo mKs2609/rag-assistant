@@ -35,9 +35,27 @@ export async function callGemini(
   }
 }
 
-export function geminiErrorMessage(status: number): string {
-  if (status === 429 || status === 503) {
-    return 'The AI model is busy right now. Please try again in a moment.'
+// a 429 is either "too many in the last minute", which passes, or "that is all for today",
+// which does not. the two need opposite responses, so they are told apart by the quota the
+// error names rather than being reported together as the model being busy.
+export type Failure = 'quota-daily' | 'quota-rate' | 'busy' | 'other'
+
+export function geminiFailure(status: number, body = ''): Failure {
+  if (status === 429) {
+    if (/per\s*day|PerDay/i.test(body)) return 'quota-daily'
+    return 'quota-rate'
   }
-  return 'The AI service returned an error. Please try again.'
+  if (status === 503) return 'busy'
+  return 'other'
+}
+
+const MESSAGES: Record<Failure, string> = {
+  'quota-daily': "The daily free quota for the AI model is used up. It resets tomorrow.",
+  'quota-rate': 'Too many requests to the AI model just now. Please try again in a minute.',
+  busy: 'The AI model is busy right now. Please try again in a moment.',
+  other: 'The AI service returned an error. Please try again.',
+}
+
+export function geminiErrorMessage(status: number, body = ''): string {
+  return MESSAGES[geminiFailure(status, body)]
 }

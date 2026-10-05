@@ -50,7 +50,8 @@ Most RAG tutorials stop at: embed one PDF, run a vector search, paste the result
 **Evaluation**
 - Save question and answer pairs with an expected document and expected keywords
 - Score retrieval accuracy and answer accuracy, for the whole set or one question
-- Questions that fail because the model was unavailable are excluded from the score
+- Retrieval is scored separately from the answer, so a day when the model is out of quota still gives a full retrieval measurement
+- Questions the model never reached read as "not scored" rather than as failures, and each coverage is reported with its own number
 - Every full run is stored, so the panel charts accuracy across runs instead of only the latest
 
 **Documents**
@@ -93,6 +94,7 @@ flowchart TD
 | Chart check | Each data point must name a source, and both its number and its label must appear in that passage |
 | Keyword index | A GIN index on `to_tsvector('english', content)`, without which every search scans every chunk |
 | Rate limits | Chat 15 per 5 min, uploads 10 per 10 min, evaluations 5 per 10 min, signups 5 per hour per IP |
+| Model quota | Gemini's free tier allows 20 requests a day. A run stops asking once that is gone, rather than retrying every remaining question |
 
 ## Security
 
@@ -204,6 +206,7 @@ lib/
   citations.ts   # citation grounding check
   charts.ts      # chart grounding, and writing verdicts back into an answer
   markdown.ts    # parses an answer into blocks, including charts
+  eval.ts        # scoring a run, retrieval and answer counted separately
   trend.ts       # geometry for the evaluation accuracy chart
   clipboard.ts   # copy to the clipboard, with a fallback for browsers without the API
   time.ts        # short timestamps for the message buttons

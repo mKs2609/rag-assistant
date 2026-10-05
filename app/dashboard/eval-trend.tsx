@@ -56,6 +56,7 @@ export default function EvalTrend({ runs }: { runs: EvalRun[] }) {
   const retrieval = runs.map((r) => r.retrievalAccuracy)
   const answer = runs.map((r) => r.answerAccuracy)
   const latest = runs[runs.length - 1]
+  const total = latest.scoredCount + latest.skippedCount
   const retrievalChange = changeAcross(retrieval)
   const answerChange = changeAcross(answer)
   const anyGap = runs.some((r) => r.retrievalAccuracy === null || r.answerAccuracy === null)
@@ -66,11 +67,14 @@ export default function EvalTrend({ runs }: { runs: EvalRun[] }) {
         <p className="text-xs font-bold text-bone uppercase tracking-wider">
           Accuracy over the last {runs.length} run{runs.length === 1 ? '' : 's'}
         </p>
+        {/* the two are measured over different numbers of questions whenever the model was
+            unavailable, so one shared coverage figure would misdescribe at least one of them */}
         <p className="text-xs text-bone/70">
-          Latest: {formatPercent(latest.retrievalAccuracy)} retrieval,{' '}
-          {formatPercent(latest.answerAccuracy)} answer
+          Latest: {formatPercent(latest.retrievalAccuracy)} retrieval from{' '}
+          {latest.retrievalScoredCount} of {total},{' '}
+          {formatPercent(latest.answerAccuracy)} answer from{' '}
           <span className={latest.skippedCount > 0 ? 'text-red-400' : ''}>
-            {' '}· from {latest.scoredCount} of {latest.scoredCount + latest.skippedCount}
+            {latest.scoredCount} of {total}
           </span>
         </p>
       </div>

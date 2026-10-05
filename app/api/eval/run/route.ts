@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { callGemini, geminiErrorMessage } from '@/lib/gemini'
+import { callGemini, geminiErrorMessage, geminiFailure } from '@/lib/gemini'
+import { answerIsCorrect, keywordsFoundIn, scoreRun, type Outcome } from '@/lib/eval'
 
 // a full set is one gemini call per question, which needs more than the default
 export const maxDuration = 300
@@ -31,16 +32,6 @@ async function embedQueries(texts: string[]): Promise<number[][]> {
     for (const row of data.data) out.push(row.embedding)
   }
   return out
-}
-
-function significantWords(text: string): Set<string> {
-  const STOPWORDS = new Set([
-    'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'to',
-    'of', 'in', 'on', 'at', 'for', 'with', 'by', 'from', 'as', 'and', 'or',
-  ])
-  return new Set(
-    text.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter((w) => w.length > 2 && !STOPWORDS.has(w))
-  )
 }
 
 export async function POST(request: Request) {
@@ -108,7 +99,16 @@ export async function POST(request: Request) {
     return new Promise((resolve) => setTimeout(resolve, ms))
   }
 
-  const results = []
+  const results: {
+    questionId: string
+    question: string
+    retrievalHit: boolean | null
+    answerCorrect: boolean | null
+    answer: string
+    keywordsFound?: string[]
+    keywordsExpected?: string[]
+    error?: string
+  }[] = []
 
   // embed everything up front, so the rest of the run makes no further voyage requests
   let embeddings: number[][]
@@ -122,30 +122,54 @@ export async function POST(request: Request) {
     )
   }
 
+  // once the day's free quota is gone every later question gets the same answer, so stop
+  // asking. twenty questions times three retries is a lot of requests that cannot succeed.
+  let modelOutOfQuota = false
+
   for (let i = 0; i < questions.length; i++) {
     const q = questions[i]
     // the model is the remaining limit, so leave a gap between questions
-    if (i > 0) {
+    if (i > 0 && !modelOutOfQuota) {
       await sleep(1200)
     }
-    try {
-      const queryEmbedding = embeddings[i]
-      const { data: matches } = await supabase.rpc('match_document_chunks', {
-        query_embedding: queryEmbedding,
-        match_tenant_id: profile.tenant_id,
-        match_count: 5,
-        filter_document_ids: null,
-      })
 
-      const chunks = (matches ?? []) as { document_id: string; content: string }[]
-      const retrievedDocIds = chunks.map((m) => m.document_id)
-      const retrievalHit = q.expected_document_id
-        ? retrievedDocIds.includes(q.expected_document_id)
+    // searching needs no model, so it is measured on its own and kept whatever follows
+    let retrievalHit: boolean | null = null
+    let chunks: { document_id: string; content: string }[] = []
+    let searchError = ''
+
+    const { data: matches, error: searchFailed } = await supabase.rpc('match_document_chunks', {
+      query_embedding: embeddings[i],
+      match_tenant_id: profile.tenant_id,
+      match_count: 5,
+      filter_document_ids: null,
+    })
+
+    if (searchFailed) {
+      // this used to pass silently as "no passages found", which then scored as a miss
+      console.error(`Search failed for "${q.question}":`, searchFailed.message)
+      searchError = 'The search failed for this question, so it could not be scored.'
+    } else {
+      chunks = (matches ?? []) as { document_id: string; content: string }[]
+      retrievalHit = q.expected_document_id
+        ? chunks.map((m) => m.document_id).includes(q.expected_document_id)
         : true
+    }
 
-      const context = chunks
-        .map((m, i) => `[${i + 1}] ${m.content}`)
-        .join('\n\n')
+    if (modelOutOfQuota || searchError) {
+      results.push({
+        questionId: q.id,
+        question: q.question,
+        retrievalHit,
+        answerCorrect: null,
+        answer: '',
+        error: searchError || geminiErrorMessage(429, 'per day'),
+      })
+      continue
+    }
+
+    try {
+      const context = chunks.map((m, n) => `[${n + 1}] ${m.content}`).join('\n\n')
 
       const geminiRes = await callGemini('generateContent', {
         systemInstruction: {
@@ -156,54 +180,50 @@ export async function POST(request: Request) {
 
       // a failed call used to score as a wrong answer
       if (!geminiRes.ok) {
-        console.error(`Gemini error (${geminiRes.status}):`, await geminiRes.text())
-        throw new Error(geminiErrorMessage(geminiRes.status))
+        const body = await geminiRes.text()
+        console.error(`Gemini error (${geminiRes.status}):`, body)
+        if (geminiFailure(geminiRes.status, body) === 'quota-daily') modelOutOfQuota = true
+        throw new Error(geminiErrorMessage(geminiRes.status, body))
       }
 
       const geminiData = await geminiRes.json()
       const answer: string = geminiData.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
-
-      const answerWords = significantWords(answer)
       const expectedKeywords: string[] = q.expected_keywords ?? []
-      const keywordsFound = expectedKeywords.filter((kw) => answerWords.has(kw.toLowerCase()))
-      const answerCorrect =
-        expectedKeywords.length === 0 ? true : keywordsFound.length / expectedKeywords.length >= 0.5
 
       results.push({
         questionId: q.id,
         question: q.question,
         retrievalHit,
-        answerCorrect,
+        answerCorrect: answerIsCorrect(answer, expectedKeywords),
         answer,
-        keywordsFound,
+        keywordsFound: keywordsFoundIn(answer, expectedKeywords),
         keywordsExpected: expectedKeywords,
       })
     } catch (err) {
+      // the retrieval result above still stands, only the answer is unknown
       results.push({
         questionId: q.id,
         question: q.question,
-        retrievalHit: false,
-        answerCorrect: false,
+        retrievalHit,
+        answerCorrect: null,
         answer: '',
-        error: err instanceof Error ? err.message : 'Evaluation failed for this question',
+        error: err instanceof Error ? err.message : 'The answer could not be scored.',
       })
     }
   }
 
-  // skip questions that errored, they say nothing about retrieval or answer quality
-  const scored = results.filter((r) => !('error' in r))
-  const retrievalScore = scored.length ? scored.filter((r) => r.retrievalHit).length / scored.length : null
-  const answerScore = scored.length ? scored.filter((r) => r.answerCorrect).length / scored.length : null
+  const score = scoreRun(results as Outcome[])
 
   // kept so the scores can be compared over time instead of vanishing on reload.
   // only a full run goes on the trend, a single question is not comparable with the rest.
   const { error: runError } = await createAdminClient().from('eval_runs').insert({
     tenant_id: profile.tenant_id,
     user_id: user.id,
-    retrieval_accuracy: retrievalScore,
-    answer_accuracy: answerScore,
-    scored_count: scored.length,
-    skipped_count: results.length - scored.length,
+    retrieval_accuracy: score.retrievalAccuracy,
+    answer_accuracy: score.answerAccuracy,
+    retrieval_scored_count: score.retrievalScored,
+    scored_count: score.answerScored,
+    skipped_count: score.total - score.answerScored,
     is_full_run: !questionId,
   })
   if (runError) {
@@ -211,5 +231,9 @@ export async function POST(request: Request) {
     console.error('Failed to record eval run scores:', runError.message)
   }
 
-  return NextResponse.json({ results, retrievalScore, answerScore })
+  return NextResponse.json({
+    results,
+    retrievalScore: score.retrievalAccuracy,
+    answerScore: score.answerAccuracy,
+  })
 }

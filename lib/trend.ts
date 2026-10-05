@@ -4,6 +4,8 @@ export interface EvalRun {
   id: string
   retrievalAccuracy: number | null
   answerAccuracy: number | null
+  /** questions whose retrieval was measured, which the model cannot stop */
+  retrievalScoredCount: number
   scoredCount: number
   skippedCount: number
   createdAt: string
