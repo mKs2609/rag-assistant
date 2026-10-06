@@ -15,6 +15,20 @@ const EVAL_RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000
 // the first few failed with 429. voyage accepts up to 128 inputs per request.
 const EMBED_BATCH = 128
 
+// the free tier allows about ten model requests a minute. the loop used to leave 1.2s
+// between questions, which is nearer fifty a minute, so most of a run was rejected for
+// going too fast and the retries spent the daily allowance on requests that could not
+// succeed. one question every 6.5 seconds stays under the limit.
+const MODEL_GAP_MS = 6_500
+
+// a retry a second later cannot clear a limit that lasts a minute, and the next question
+// is already 6.5s away, which is the better recovery
+const MODEL_ATTEMPTS = 1
+
+// the route is allowed 300s. stop before the platform stops us, so the questions that did
+// run are still saved and scored instead of the whole run being lost
+const TIME_BUDGET_MS = 260_000
+
 async function embedQueries(texts: string[]): Promise<number[][]> {
   const out: number[][] = []
   for (let start = 0; start < texts.length; start += EMBED_BATCH) {
@@ -124,17 +138,20 @@ export async function POST(request: Request) {
 
   // once the day's free quota is gone every later question gets the same answer, so stop
   // asking. twenty questions times three retries is a lot of requests that cannot succeed.
+  const startedAt = Date.now()
   let modelOutOfQuota = false
+  let outOfTime = false
   // google's own wait, captured when the quota first ran out, so every remaining question
   // repeats the same real figure rather than a rebuilt guess
   let quotaMessage = ''
 
   for (let i = 0; i < questions.length; i++) {
     const q = questions[i]
-    // the model is the remaining limit, so leave a gap between questions
-    if (i > 0 && !modelOutOfQuota) {
-      await sleep(1200)
+    // the model is the remaining limit, so stay under its rate rather than being rejected
+    if (i > 0 && !modelOutOfQuota && !outOfTime) {
+      await sleep(MODEL_GAP_MS)
     }
+    if (Date.now() - startedAt > TIME_BUDGET_MS) outOfTime = true
 
     // searching needs no model, so it is measured on its own and kept whatever follows
     let retrievalHit: boolean | null = null
@@ -159,14 +176,18 @@ export async function POST(request: Request) {
         : true
     }
 
-    if (modelOutOfQuota || searchError) {
+    if (modelOutOfQuota || outOfTime || searchError) {
       results.push({
         questionId: q.id,
         question: q.question,
         retrievalHit,
         answerCorrect: null,
         answer: '',
-        error: searchError || quotaMessage,
+        error:
+          searchError ||
+          (outOfTime
+            ? 'The run reached its time limit before this question. Run it again to score the rest.'
+            : quotaMessage),
       })
       continue
     }
@@ -174,12 +195,17 @@ export async function POST(request: Request) {
     try {
       const context = chunks.map((m, n) => `[${n + 1}] ${m.content}`).join('\n\n')
 
-      const geminiRes = await callGemini('generateContent', {
-        systemInstruction: {
-          parts: [{ text: `Answer using only this reference material:\n${context}` }],
+      const geminiRes = await callGemini(
+        'generateContent',
+        {
+          systemInstruction: {
+            parts: [{ text: `Answer using only this reference material:\n${context}` }],
+          },
+          contents: [{ role: 'user', parts: [{ text: q.question }] }],
         },
-        contents: [{ role: 'user', parts: [{ text: q.question }] }],
-      })
+        undefined,
+        MODEL_ATTEMPTS
+      )
 
       // a failed call used to score as a wrong answer
       if (!geminiRes.ok) {

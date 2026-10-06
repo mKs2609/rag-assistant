@@ -9,7 +9,10 @@ export async function GET() {
   const { data, error } = await supabase
     .from('eval_questions')
     .select('id, question, expected_document_id, expected_keywords, created_at, documents(filename)')
-    .order('created_at', { ascending: false })
+    // same order a run works through them, so the results read in the order they happened.
+    // listed newest first, the question that exhausted the quota appeared at the top and
+    // the ones that never ran appeared below it, which read as the opposite of the truth
+    .order('created_at', { ascending: true })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ questions: data ?? [] })

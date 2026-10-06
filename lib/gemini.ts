@@ -6,11 +6,17 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-// gemini often returns 503 when it's busy, usually gone after a second or two
+// gemini often returns 503 when it's busy, usually gone after a second or two.
+//
+// maxAttempts is worth lowering for a caller that works through a list. a retry a second
+// later cannot clear a per minute limit, which lasts a minute, so it fails again and the
+// free tier has one fewer request left for the rest of the list. pacing the list beats
+// retrying inside it.
 export async function callGemini(
   method: 'generateContent' | 'streamGenerateContent',
   body: unknown,
-  onRetry?: (attempt: number) => void
+  onRetry?: (attempt: number) => void,
+  maxAttempts: number = MAX_ATTEMPTS
 ): Promise<Response> {
   const query = method === 'streamGenerateContent' ? '?alt=sse' : ''
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:${method}${query}`
@@ -25,7 +31,7 @@ export async function callGemini(
       body: JSON.stringify(body),
     })
 
-    if (res.ok || !RETRYABLE_STATUS.has(res.status) || attempt >= MAX_ATTEMPTS) {
+    if (res.ok || !RETRYABLE_STATUS.has(res.status) || attempt >= maxAttempts) {
       return res
     }
 

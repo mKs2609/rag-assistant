@@ -94,7 +94,7 @@ flowchart TD
 | Chart check | Each data point must name a source, and both its number and its label must appear in that passage |
 | Keyword index | A GIN index on `to_tsvector('english', content)`, without which every search scans every chunk |
 | Rate limits | Chat 15 per 5 min, uploads 10 per 10 min, evaluations 5 per 10 min, signups 5 per hour per IP |
-| Model quota | Gemini's free tier allows 20 requests a day. A run stops asking once that is gone, rather than retrying every remaining question |
+| Model quota | Gemini's free tier allows about 10 requests a minute and 20 a day. An evaluation leaves 6.5s between questions to stay under the rate, does not retry inside a run, and stops asking once the daily allowance is gone |
 
 ## Security
 
