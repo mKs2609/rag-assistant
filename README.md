@@ -94,7 +94,8 @@ flowchart TD
 | Chart check | Each data point must name a source, and both its number and its label must appear in that passage |
 | Keyword index | A GIN index on `to_tsvector('english', content)`, without which every search scans every chunk |
 | Rate limits | Chat 15 per 5 min, uploads 10 per 10 min, evaluations 5 per 10 min, signups 5 per hour per IP |
-| Model quota | Gemini's free tier allows about 10 requests a minute and 20 a day. An evaluation leaves 6.5s between questions to stay under the rate, does not retry inside a run, and stops asking once the daily allowance is gone |
+| Model quota | Gemini's free tier allows about 10 requests a minute and 20 a day. An evaluation starts requests 6.5s apart to stay under the rate, does not retry inside a run, and stops asking once the daily allowance is gone |
+| Model thinking | The flash models reason before answering by default, measured at 19s a call against 3s without. Every answer here comes from passages already supplied, so requests ask for no thinking |
 
 ## Security
 
@@ -207,12 +208,12 @@ lib/
   charts.ts      # chart grounding, and writing verdicts back into an answer
   markdown.ts    # parses an answer into blocks, including charts
   eval.ts        # scoring a run, retrieval and answer counted separately
+  gemini.ts      # gemini calls: retries, timeouts, quota messages, no thinking
   trend.ts       # geometry for the evaluation accuracy chart
   clipboard.ts   # copy to the clipboard, with a fallback for browsers without the API
   time.ts        # short timestamps for the message buttons
   theme.ts       # the accent colour as a value, for props that need one
   ocr.ts         # OCR fallback for scanned PDFs
-  gemini.ts      # Gemini calls with retry on busy responses
   hooks/         # speech recognition and synthesis
   supabase/      # browser, server and admin clients
 schema/          # SQL migrations, run in order

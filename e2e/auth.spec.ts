@@ -28,6 +28,5 @@ test('forgot password gives the same answer for an email with no account', async
 test('a reset link that is missing or broken is rejected', async ({ page }) => {
   await page.goto('/reset-password#access_token=fake&refresh_token=fake&type=recovery')
   await expect(page.getByText('This reset link is invalid or has expired')).toBeVisible()
-  // the tokens are removed from the address bar
   expect(page.url()).not.toContain('access_token')
 })

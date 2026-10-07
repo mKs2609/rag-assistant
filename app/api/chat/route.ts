@@ -24,7 +24,6 @@ async function embedQuery(text: string): Promise<number[]> {
   return data.data[0].embedding
 }
 
-// last N messages sent as context
 const MAX_HISTORY_MESSAGES = 10
 
 export async function POST(request: Request) {
@@ -271,7 +270,7 @@ ${context}`
             systemInstruction: { parts: [{ text: systemPrompt }] },
             contents: geminiContents,
           },
-          () => send({ type: 'status', status: 'The model is busy, retrying…' })
+          { onRetry: () => send({ type: 'status', status: 'The model is busy, retrying…' }) }
         )
 
         if (!geminiRes.ok || !geminiRes.body) {

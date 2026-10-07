@@ -1,5 +1,3 @@
-// splitting document text and grouping chunks into embedding requests
-
 export const CHUNK_SIZE = 1000
 export const CHUNK_OVERLAP = 150
 

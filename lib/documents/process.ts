@@ -41,7 +41,6 @@ async function embedBatch(texts: string[], attempt = 1): Promise<number[][]> {
 
   if (!res.ok) {
     const errText = await res.text()
-    // retry on rate limit / server errors
     const isRetryable = res.status === 429 || res.status >= 500
     if (isRetryable && attempt < 4) {
       await sleep(attempt * 2000)

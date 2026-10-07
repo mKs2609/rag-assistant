@@ -222,7 +222,6 @@ export default function ChatBox({
   async function ask(userMessage: string) {
     if (!userMessage.trim() || loading) return
 
-    // show the question and a status placeholder right away
     setMessages((prev) => [
       ...prev,
       { role: 'user', content: userMessage, userId: currentUserId, createdAt: new Date().toISOString() },

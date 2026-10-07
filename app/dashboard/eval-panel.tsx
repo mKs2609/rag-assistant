@@ -98,7 +98,6 @@ export default function EvalPanel({ documents }: { documents: Document[] }) {
       body: JSON.stringify({
         question: newQuestion,
         expectedDocumentId: newDocId || null,
-        // split on commas and spaces
         expectedKeywords: newKeywords
           .split(',')
           .flatMap((segment) => segment.trim().split(/\s+/))

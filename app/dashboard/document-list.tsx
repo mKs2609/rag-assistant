@@ -45,7 +45,6 @@ export default function DocumentList({
     return isAdmin || doc.uploaded_by === currentUserId
   }
 
-  // refresh while any document is still processing
   const hasProcessing = documents.some((d) => d.status === 'processing')
   const pollCount = useRef(0)
 

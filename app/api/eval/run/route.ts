@@ -15,15 +15,19 @@ const EVAL_RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000
 // the first few failed with 429. voyage accepts up to 128 inputs per request.
 const EMBED_BATCH = 128
 
-// the free tier allows about ten model requests a minute. the loop used to leave 1.2s
-// between questions, which is nearer fifty a minute, so most of a run was rejected for
-// going too fast and the retries spent the daily allowance on requests that could not
-// succeed. one question every 6.5 seconds stays under the limit.
+// the free tier allows about ten model requests a minute, so requests start at least
+// 6.5 seconds apart. this is the gap between the starts, not an extra pause after each
+// one: the model itself often takes longer than the window, and in that case there is
+// nothing left to wait for.
 const MODEL_GAP_MS = 6_500
 
 // a retry a second later cannot clear a limit that lasts a minute, and the next question
 // is already 6.5s away, which is the better recovery
 const MODEL_ATTEMPTS = 1
+
+// a busy model has been seen to hold a request open for 61s. left unbounded, two of those
+// spend most of a run's time budget and every question after them goes unscored
+const MODEL_TIMEOUT_MS = 25_000
 
 // the route is allowed 300s. stop before the platform stops us, so the questions that did
 // run are still saved and scored instead of the whole run being lost
@@ -56,7 +60,6 @@ export async function POST(request: Request) {
   const { data: profile } = await supabase.from('profiles').select('tenant_id').eq('id', user.id).single()
   if (!profile) return NextResponse.json({ error: 'Profile not found' }, { status: 404 })
 
-  // optionally run a single question
   let questionId: string | undefined
   try {
     const body = await request.json()
@@ -113,16 +116,14 @@ export async function POST(request: Request) {
     return new Promise((resolve) => setTimeout(resolve, ms))
   }
 
-  const results: {
+  const results: (Outcome & {
     questionId: string
     question: string
-    retrievalHit: boolean | null
-    answerCorrect: boolean | null
     answer: string
     keywordsFound?: string[]
     keywordsExpected?: string[]
     error?: string
-  }[] = []
+  })[] = []
 
   // embed everything up front, so the rest of the run makes no further voyage requests
   let embeddings: number[][]
@@ -136,9 +137,10 @@ export async function POST(request: Request) {
     )
   }
 
-  // once the day's free quota is gone every later question gets the same answer, so stop
-  // asking. twenty questions times three retries is a lot of requests that cannot succeed.
   const startedAt = Date.now()
+  let lastCallStartedAt = 0
+  // once the day's allowance is gone every later question gets the same answer, so stop
+  // asking rather than spending the rest of the run proving it
   let modelOutOfQuota = false
   let outOfTime = false
   // google's own wait, captured when the quota first ran out, so every remaining question
@@ -147,10 +149,6 @@ export async function POST(request: Request) {
 
   for (let i = 0; i < questions.length; i++) {
     const q = questions[i]
-    // the model is the remaining limit, so stay under its rate rather than being rejected
-    if (i > 0 && !modelOutOfQuota && !outOfTime) {
-      await sleep(MODEL_GAP_MS)
-    }
     if (Date.now() - startedAt > TIME_BUDGET_MS) outOfTime = true
 
     // searching needs no model, so it is measured on its own and kept whatever follows
@@ -195,6 +193,15 @@ export async function POST(request: Request) {
     try {
       const context = chunks.map((m, n) => `[${n + 1}] ${m.content}`).join('\n\n')
 
+      // wait only for what is left of the window since the last request started. a call
+      // that itself took longer than the window has already done the waiting, and sleeping
+      // again on top of it was spending the run's time budget on nothing
+      const sinceLastCall = Date.now() - lastCallStartedAt
+      if (lastCallStartedAt > 0 && sinceLastCall < MODEL_GAP_MS) {
+        await sleep(MODEL_GAP_MS - sinceLastCall)
+      }
+      lastCallStartedAt = Date.now()
+
       const geminiRes = await callGemini(
         'generateContent',
         {
@@ -203,8 +210,7 @@ export async function POST(request: Request) {
           },
           contents: [{ role: 'user', parts: [{ text: q.question }] }],
         },
-        undefined,
-        MODEL_ATTEMPTS
+        { maxAttempts: MODEL_ATTEMPTS, timeoutMs: MODEL_TIMEOUT_MS }
       )
 
       // a failed call used to score as a wrong answer
@@ -245,7 +251,7 @@ export async function POST(request: Request) {
     }
   }
 
-  const score = scoreRun(results as Outcome[])
+  const score = scoreRun(results)
 
   // kept so the scores can be compared over time instead of vanishing on reload.
   // only a full run goes on the trend, a single question is not comparable with the rest.

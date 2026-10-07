@@ -6,6 +6,28 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+// the flash models think before answering by default, which measured at 19 seconds a call
+// against 3 seconds with this set. every answer here is drawn from passages we already
+// supply, so there is little for the model to reason its way to. the model still reports
+// some thinking, so this reduces it rather than switching it off.
+const NO_THINKING = { thinkingConfig: { thinkingBudget: 0 } }
+
+export function withoutThinking(body: unknown): unknown {
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) return body
+  const fields = body as Record<string, unknown>
+  const existing = (fields.generationConfig ?? {}) as Record<string, unknown>
+  // a caller that sets its own thinkingConfig keeps it
+  return { ...fields, generationConfig: { ...NO_THINKING, ...existing } }
+}
+
+export interface CallOptions {
+  onRetry?: (attempt: number) => void
+  maxAttempts?: number
+  /** give up on a single request after this long. a 503 has been seen to hang for 61s,
+   *  which on a caller working through a list eats the time left for everything after it */
+  timeoutMs?: number
+}
+
 // gemini often returns 503 when it's busy, usually gone after a second or two.
 //
 // maxAttempts is worth lowering for a caller that works through a list. a retry a second
@@ -15,21 +37,34 @@ function sleep(ms: number) {
 export async function callGemini(
   method: 'generateContent' | 'streamGenerateContent',
   body: unknown,
-  onRetry?: (attempt: number) => void,
-  maxAttempts: number = MAX_ATTEMPTS
+  { onRetry, maxAttempts = MAX_ATTEMPTS, timeoutMs }: CallOptions = {}
 ): Promise<Response> {
   const query = method === 'streamGenerateContent' ? '?alt=sse' : ''
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:${method}${query}`
+  const payload = JSON.stringify(withoutThinking(body))
 
   for (let attempt = 1; ; attempt++) {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-goog-api-key': process.env.GEMINI_API_KEY ?? '',
-      },
-      body: JSON.stringify(body),
-    })
+    let res: Response
+    try {
+      res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-goog-api-key': process.env.GEMINI_API_KEY ?? '',
+        },
+        body: payload,
+        signal: timeoutMs ? AbortSignal.timeout(timeoutMs) : undefined,
+      })
+    } catch (err) {
+      // a timeout reads like the model being busy, because that is what caused it
+      if (attempt >= maxAttempts) {
+        console.error('Gemini request did not complete:', err)
+        return new Response('{"error":{"code":503,"message":"request timed out"}}', { status: 503 })
+      }
+      onRetry?.(attempt)
+      await sleep(1000 * 2 ** (attempt - 1))
+      continue
+    }
 
     if (res.ok || !RETRYABLE_STATUS.has(res.status) || attempt >= maxAttempts) {
       return res

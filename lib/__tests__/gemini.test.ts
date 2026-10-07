@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { geminiFailure, geminiErrorMessage, retryAfter } from '@/lib/gemini'
+import { geminiFailure, geminiErrorMessage, retryAfter, withoutThinking } from '@/lib/gemini'
 
 // what google actually sends back, trimmed to the part that names the quota
 const DAILY = JSON.stringify({
@@ -89,5 +89,45 @@ describe('geminiErrorMessage', () => {
 
   it('gives different advice for the two reasons a 429 happens', () => {
     expect(geminiErrorMessage(429, DAILY)).not.toBe(geminiErrorMessage(429, PER_MINUTE))
+  })
+})
+
+describe('withoutThinking', () => {
+  const ask = { contents: [{ role: 'user', parts: [{ text: 'hi' }] }] }
+
+  it('asks the model not to think, because the answer is in the passages already', () => {
+    const sent = withoutThinking(ask) as Record<string, never>
+    expect(sent.generationConfig).toEqual({ thinkingConfig: { thinkingBudget: 0 } })
+  })
+
+  it('leaves the rest of the request alone', () => {
+    const sent = withoutThinking({ ...ask, systemInstruction: { parts: [{ text: 'rules' }] } }) as {
+      contents: unknown
+      systemInstruction: unknown
+    }
+    expect(sent.contents).toEqual(ask.contents)
+    expect(sent.systemInstruction).toEqual({ parts: [{ text: 'rules' }] })
+  })
+
+  it('keeps other generation settings a caller has set', () => {
+    const sent = withoutThinking({ ...ask, generationConfig: { temperature: 0.2 } }) as {
+      generationConfig: Record<string, unknown>
+    }
+    expect(sent.generationConfig.temperature).toBe(0.2)
+    expect(sent.generationConfig.thinkingConfig).toEqual({ thinkingBudget: 0 })
+  })
+
+  it('does not override a caller that asked for thinking on purpose', () => {
+    const sent = withoutThinking({
+      ...ask,
+      generationConfig: { thinkingConfig: { thinkingBudget: 2048 } },
+    }) as { generationConfig: { thinkingConfig: unknown } }
+    expect(sent.generationConfig.thinkingConfig).toEqual({ thinkingBudget: 2048 })
+  })
+
+  it('hands back anything that is not a request object untouched', () => {
+    expect(withoutThinking(null)).toBeNull()
+    expect(withoutThinking('text')).toBe('text')
+    expect(withoutThinking([1, 2])).toEqual([1, 2])
   })
 })

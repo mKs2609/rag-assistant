@@ -2,7 +2,6 @@ import Strands from '@/components/Strands'
 import ElectricBorder from '@/components/ElectricBorder'
 import { ACCENT } from '@/lib/theme'
 
-// background, headline and card shared by the auth pages
 export default function AuthShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="relative min-h-screen flex items-center justify-center overflow-hidden bg-[#101010]">
