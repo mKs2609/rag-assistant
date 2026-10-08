@@ -1,5 +1,5 @@
 import { PDFDocument } from 'pdf-lib'
-import { callGemini } from '@/lib/gemini'
+import { answerText, callGemini } from '@/lib/gemini'
 
 // a scanned page yields little or no extractable text, that's when OCR is worth trying
 export const MIN_EXTRACTED_TEXT_LENGTH = 40
@@ -73,7 +73,7 @@ async function transcribe(pdfBytes: Uint8Array): Promise<string> {
   }
 
   const data = await res.json()
-  return (data.candidates?.[0]?.content?.parts?.[0]?.text ?? '').trim()
+  return answerText(data).trim()
 }
 
 export async function ocrPdf(buffer: Buffer, deadline = Infinity): Promise<string> {

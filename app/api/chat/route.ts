@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { callGemini, geminiErrorMessage } from '@/lib/gemini'
+import { answerText, callGemini, geminiErrorMessage } from '@/lib/gemini'
 import { isCitationGrounded, stripFencedBlocks } from '@/lib/citations'
 import { verifyChartsIn } from '@/lib/charts'
 
@@ -299,7 +299,7 @@ ${context}`
 
             try {
               const parsed = JSON.parse(jsonStr)
-              const delta: string = parsed.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
+              const delta = answerText(parsed)
               if (delta) {
                 fullText += delta
                 send({ type: 'token', text: delta })

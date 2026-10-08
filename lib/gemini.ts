@@ -20,6 +20,25 @@ export function withoutThinking(body: unknown): unknown {
   return { ...fields, generationConfig: { ...NO_THINKING, ...existing } }
 }
 
+interface Part {
+  text?: string
+  /** the model's own reasoning, which it may return alongside the answer but is not part of it */
+  thought?: boolean
+}
+
+// the answer can arrive split across several parts. reading only the first gives a
+// fragment that stops mid sentence, and a thought part is not answer text at all.
+// works on a whole response and on one streamed chunk, which have the same shape.
+export function answerText(data: unknown): string {
+  const parts = (data as { candidates?: { content?: { parts?: Part[] } }[] } | null)?.candidates?.[0]
+    ?.content?.parts
+  if (!Array.isArray(parts)) return ''
+  return parts
+    .filter((part) => part && !part.thought)
+    .map((part) => part.text ?? '')
+    .join('')
+}
+
 export interface CallOptions {
   onRetry?: (attempt: number) => void
   maxAttempts?: number

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { callGemini, geminiErrorMessage, geminiFailure } from '@/lib/gemini'
+import { answerText, callGemini, geminiErrorMessage, geminiFailure } from '@/lib/gemini'
 import { answerIsCorrect, keywordsFoundIn, scoreRun, type Outcome } from '@/lib/eval'
 
 // a full set is one gemini call per question, which needs more than the default
@@ -225,8 +225,7 @@ export async function POST(request: Request) {
         throw new Error(message)
       }
 
-      const geminiData = await geminiRes.json()
-      const answer: string = geminiData.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
+      const answer = answerText(await geminiRes.json())
       const expectedKeywords: string[] = q.expected_keywords ?? []
 
       results.push({
