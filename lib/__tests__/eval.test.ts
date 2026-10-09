@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { answerIsCorrect, keywordsFoundIn, scoreRun, significantWords } from '@/lib/eval'
+import { answerIsCorrect, keywordsFoundIn, rotate, scoreRun, significantWords } from '@/lib/eval'
 
 describe('significantWords', () => {
   it('drops the short and common words that match anything', () => {
@@ -96,5 +96,48 @@ describe('scoreRun', () => {
       answerScored: 0,
       total: 0,
     })
+  })
+})
+
+describe('rotate', () => {
+  const set = ['a', 'b', 'c', 'd']
+
+  it('leaves the first run in the order the questions were written', () => {
+    expect(rotate(set, 0)).toEqual(['a', 'b', 'c', 'd'])
+  })
+
+  it('starts one further along on each following run', () => {
+    expect(rotate(set, 1)).toEqual(['b', 'c', 'd', 'a'])
+    expect(rotate(set, 2)).toEqual(['c', 'd', 'a', 'b'])
+  })
+
+  it('gives every question a turn at the front within one cycle', () => {
+    const leaders = set.map((_, run) => rotate(set, run)[0])
+    expect(new Set(leaders).size).toBe(set.length)
+  })
+
+  it('brings the tail to the front, which is the whole point', () => {
+    // a run that only reaches two questions scores a and b, then c and d next time
+    expect(rotate(set, 2).slice(0, 2)).toEqual(['c', 'd'])
+  })
+
+  it('comes back round once the runs pass the number of questions', () => {
+    expect(rotate(set, 4)).toEqual(set)
+    expect(rotate(set, 5)).toEqual(rotate(set, 1))
+  })
+
+  it('keeps every question exactly once, whatever the offset', () => {
+    expect([...rotate(set, 3)].sort()).toEqual([...set].sort())
+  })
+
+  it('does not change the caller\'s array', () => {
+    const original = [...set]
+    rotate(set, 2)
+    expect(set).toEqual(original)
+  })
+
+  it('copes with an empty set and with one question', () => {
+    expect(rotate([], 3)).toEqual([])
+    expect(rotate(['only'], 7)).toEqual(['only'])
   })
 })

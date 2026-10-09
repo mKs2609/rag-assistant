@@ -51,6 +51,7 @@ Most RAG tutorials stop at: embed one PDF, run a vector search, paste the result
 - Save question and answer pairs with an expected document and expected keywords
 - Score retrieval accuracy and answer accuracy, for the whole set or one question
 - Retrieval is scored separately from the answer, so a day when the model is out of quota still gives a full retrieval measurement
+- Each run starts one question further along, so the questions at the end are not the ones permanently left unscored when the time budget runs out
 - Questions the model never reached read as "not scored" rather than as failures, and each coverage is reported with its own number
 - Every full run is stored, so the panel charts accuracy across runs instead of only the latest
 
@@ -207,7 +208,7 @@ lib/
   citations.ts   # citation grounding check
   charts.ts      # chart grounding, and writing verdicts back into an answer
   markdown.ts    # parses an answer into blocks, including charts
-  eval.ts        # scoring a run, retrieval and answer counted separately
+  eval.ts        # scoring a run, retrieval and answer counted separately, question rotation
   gemini.ts      # gemini calls: retries, timeouts, quota messages, no thinking
   trend.ts       # geometry for the evaluation accuracy chart
   clipboard.ts   # copy to the clipboard, with a fallback for browsers without the API

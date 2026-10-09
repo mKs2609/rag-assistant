@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { answerText, callGemini, geminiErrorMessage, geminiFailure } from '@/lib/gemini'
-import { answerIsCorrect, keywordsFoundIn, scoreRun, type Outcome } from '@/lib/eval'
+import { answerIsCorrect, keywordsFoundIn, rotate, scoreRun, type Outcome } from '@/lib/eval'
 
 // a full set is one gemini call per question, which needs more than the default
 export const maxDuration = 300
@@ -93,11 +93,23 @@ export async function POST(request: Request) {
     query = query.eq('id', questionId)
   }
 
-  const { data: questions } = await query 
+  const { data: allQuestions } = await query
 
-  if (!questions || questions.length === 0) {
+  if (!allQuestions || allQuestions.length === 0) {
     return NextResponse.json({ error: 'No evaluation questions yet. Add some first.' }, { status: 400 })
   }
+
+  // the budget gives out before the end of a long set, and working through them in the
+  // same order every time meant the last few were never reached. counting past runs and
+  // starting that far along gives each question its turn. a single question has no order
+  // to rotate, so it is left alone.
+  const { count: pastRuns } = await supabase
+    .from('eval_runs')
+    .select('id', { count: 'exact', head: true })
+    .eq('tenant_id', profile.tenant_id)
+    .eq('is_full_run', true)
+
+  const questions = questionId ? allQuestions : rotate(allQuestions, pastRuns ?? 0)
 
   // users can't write audit_logs, so log the run with the service role
   const { error: logError } = await createAdminClient().from('audit_logs').insert({

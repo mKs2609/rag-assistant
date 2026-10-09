@@ -65,3 +65,13 @@ export function scoreRun(results: Outcome[]): RunScore {
     total: results.length,
   }
 }
+
+// a run works through the questions in order and the time budget gives out before the
+// end, so the last few were never reached. starting one step further along each time
+// means every question gets its turn across a handful of runs, rather than two whole
+// categories going permanently unmeasured.
+export function rotate<T>(items: T[], by: number): T[] {
+  if (items.length === 0) return []
+  const offset = ((Math.trunc(by) % items.length) + items.length) % items.length
+  return offset === 0 ? [...items] : [...items.slice(offset), ...items.slice(0, offset)]
+}
