@@ -13,6 +13,27 @@
 
 ---
 
+![Answering a question with a grounded chart](docs/screenshots/chat.png)
+
+*An answer built from the uploaded documents: markdown rendering, a chart whose every value was checked against the passage it came from, and the sources behind it.*
+
+<details>
+<summary><b>More screenshots</b></summary>
+
+<br>
+
+![Checked citations under an answer](docs/screenshots/grounding.png)
+
+*Each source is shown with the passage it contributed. A citation is marked verified only when its wording matches the text it points at.*
+
+![Sign in](docs/screenshots/login.png)
+
+*The auth pages, with a WebGL background drawn without an animation library.*
+
+</details>
+
+---
+
 ## Why this isn't just another "chat with your PDF" demo
 
 Most RAG tutorials stop at: embed one PDF, run a vector search, paste the result into a prompt. That is a fine starting point, and it is also where most student projects end. This one goes further on the parts that matter once more than one person uses it:
@@ -166,7 +187,7 @@ VOYAGE_API_KEY=
 GEMINI_API_KEY=
 ```
 
-Create a Supabase project, then run the files in [`/schema`](schema) in order (`001` to `012`) in the SQL Editor. They create the tables, indexes, search functions, RLS policies and the storage bucket, and can be re-run safely. Then:
+Create a Supabase project, then run the files in [`/schema`](schema) in order (`001` to `015`) in the SQL Editor. They create the tables, indexes, search functions, RLS policies and the storage bucket, and can be re-run safely. Then:
 
 ```bash
 npm run dev

@@ -158,7 +158,7 @@ describe('toSpokenText', () => {
 
 describe('toCopyText', () => {
   it('keeps the citation markers, because they are the point of the answer', () => {
-    expect(toCopyText('The code is 9977388 [1].')).toBe('The code is 9977388 [1].')
+    expect(toCopyText('The code is 9977287 [1].')).toBe('The code is 9977287 [1].')
   })
 
   it('keeps bullets on their own lines rather than running them into a sentence', () => {
