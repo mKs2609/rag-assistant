@@ -15,11 +15,14 @@ const EVAL_RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000
 // the first few failed with 429. voyage accepts up to 128 inputs per request.
 const EMBED_BATCH = 128
 
-// the free tier allows about ten model requests a minute, so requests start at least
-// 6.5 seconds apart. this is the gap between the starts, not an extra pause after each
-// one: the model itself often takes longer than the window, and in that case there is
-// nothing left to wait for.
-const MODEL_GAP_MS = 6_500
+// the free tier allows five model requests a minute, which a rejected run reported as
+// "limit: 5" against GenerateRequestsPerMinutePerProjectPerModel. 6.5s apart was nearly
+// nine a minute and a third of the questions came back rejected, each one spending a
+// request that could not succeed. twelve seconds is five a minute.
+//
+// this is the gap between the starts of two requests, not an extra pause after each one:
+// the model often takes longer than the window, and then there is nothing left to wait for.
+const MODEL_GAP_MS = 12_500
 
 // a retry a second later cannot clear a limit that lasts a minute, and the next question
 // is already 6.5s away, which is the better recovery

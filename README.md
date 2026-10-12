@@ -26,6 +26,10 @@
 
 *Each source is shown with the passage it contributed. A citation is marked verified only when its wording matches the text it points at.*
 
+![The evaluation harness](docs/screenshots/evaluation.png)
+
+*Saved question and answer pairs, each naming the document it should find and the words the answer should contain, with accuracy charted across runs. Retrieval and answer coverage are reported separately, because searching does not need the model and the model is what runs out of free quota.*
+
 ![Sign in](docs/screenshots/login.png)
 
 *The auth pages, with a WebGL background drawn without an animation library.*
@@ -116,7 +120,7 @@ flowchart TD
 | Chart check | Each data point must name a source, and both its number and its label must appear in that passage |
 | Keyword index | A GIN index on `to_tsvector('english', content)`, without which every search scans every chunk |
 | Rate limits | Chat 15 per 5 min, uploads 10 per 10 min, evaluations 5 per 10 min, signups 5 per hour per IP |
-| Model quota | Gemini's free tier allows about 10 requests a minute and 20 a day. An evaluation starts requests 6.5s apart to stay under the rate, does not retry inside a run, and stops asking once the daily allowance is gone |
+| Model quota | Gemini's free tier allows 5 requests a minute and 20 a day. An evaluation starts requests 12.5s apart to stay under the rate, does not retry inside a run, and stops asking once the daily allowance is gone |
 | Model thinking | The flash models reason before answering by default, measured at 19s a call against 3s without. Every answer here comes from passages already supplied, so requests ask for no thinking |
 
 ## Security
