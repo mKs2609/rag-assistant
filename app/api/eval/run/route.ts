@@ -15,11 +15,14 @@ const EVAL_RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000
 // the first few failed with 429. voyage accepts up to 128 inputs per request.
 const EMBED_BATCH = 128
 
-// the lite model took 14 back to back requests in 11 seconds without once pushing back,
-// so the five a minute that the chat model enforces does not apply here. two seconds is
-// thirty a minute, well inside what was measured, and puts a 22 question run under a
-// minute. this is the gap between the starts of two requests, not a pause after each one.
-const MODEL_GAP_MS = 2_000
+// the lite model allows fifteen requests a minute, which it names as "limit: 15" against
+// GenerateRequestsPerMinutePerProjectPerModel. an earlier probe stopped at fourteen and
+// saw no limit at all, so this was first set to thirty a minute and a real run of 22
+// questions was rejected five times. 4.5 seconds is thirteen a minute, under the limit
+// with room to spare, and puts a 22 question run at under two minutes.
+//
+// this is the gap between the starts of two requests, not a pause after each one.
+const MODEL_GAP_MS = 4_500
 
 // a retry a second later cannot clear a limit that lasts a minute, and the next question
 // is already 6.5s away, which is the better recovery
