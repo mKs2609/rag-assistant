@@ -1,4 +1,16 @@
 const GEMINI_MODEL = 'gemini-flash-latest'
+
+// the evaluation runs on the lite model instead. measured back to back it answered 14 of
+// 14 in 11 seconds with no rate limit at all, against five requests a minute and twenty a
+// day on the model the chat uses, and it draws on a separate allowance. a full run stops
+// competing with the chat for the same twenty requests.
+export const EVAL_MODEL = 'gemini-flash-lite-latest'
+
+// the lite models take no thinking budget, and reject the whole request with a 400 rather
+// than ignoring the field, so only the models that think are asked not to
+export function takesThinkingBudget(model: string): boolean {
+  return !/lite/i.test(model)
+}
 const MAX_ATTEMPTS = 3
 const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504])
 
@@ -45,6 +57,8 @@ export interface CallOptions {
   /** give up on a single request after this long. a 503 has been seen to hang for 61s,
    *  which on a caller working through a list eats the time left for everything after it */
   timeoutMs?: number
+  /** defaults to the model the chat uses */
+  model?: string
 }
 
 // gemini often returns 503 when it's busy, usually gone after a second or two.
@@ -56,11 +70,11 @@ export interface CallOptions {
 export async function callGemini(
   method: 'generateContent' | 'streamGenerateContent',
   body: unknown,
-  { onRetry, maxAttempts = MAX_ATTEMPTS, timeoutMs }: CallOptions = {}
+  { onRetry, maxAttempts = MAX_ATTEMPTS, timeoutMs, model = GEMINI_MODEL }: CallOptions = {}
 ): Promise<Response> {
   const query = method === 'streamGenerateContent' ? '?alt=sse' : ''
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:${method}${query}`
-  const payload = JSON.stringify(withoutThinking(body))
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:${method}${query}`
+  const payload = JSON.stringify(takesThinkingBudget(model) ? withoutThinking(body) : body)
 
   for (let attempt = 1; ; attempt++) {
     let res: Response

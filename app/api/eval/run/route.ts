@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { answerText, callGemini, geminiErrorMessage, geminiFailure } from '@/lib/gemini'
+import { answerText, callGemini, geminiErrorMessage, geminiFailure, EVAL_MODEL } from '@/lib/gemini'
 import { answerIsCorrect, keywordsFoundIn, rotate, scoreRun, type Outcome } from '@/lib/eval'
 
 // a full set is one gemini call per question, which needs more than the default
@@ -15,14 +15,11 @@ const EVAL_RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000
 // the first few failed with 429. voyage accepts up to 128 inputs per request.
 const EMBED_BATCH = 128
 
-// the free tier allows five model requests a minute, which a rejected run reported as
-// "limit: 5" against GenerateRequestsPerMinutePerProjectPerModel. 6.5s apart was nearly
-// nine a minute and a third of the questions came back rejected, each one spending a
-// request that could not succeed. twelve seconds is five a minute.
-//
-// this is the gap between the starts of two requests, not an extra pause after each one:
-// the model often takes longer than the window, and then there is nothing left to wait for.
-const MODEL_GAP_MS = 12_500
+// the lite model took 14 back to back requests in 11 seconds without once pushing back,
+// so the five a minute that the chat model enforces does not apply here. two seconds is
+// thirty a minute, well inside what was measured, and puts a 22 question run under a
+// minute. this is the gap between the starts of two requests, not a pause after each one.
+const MODEL_GAP_MS = 2_000
 
 // a retry a second later cannot clear a limit that lasts a minute, and the next question
 // is already 6.5s away, which is the better recovery
@@ -31,6 +28,10 @@ const MODEL_ATTEMPTS = 1
 // a busy model has been seen to hold a request open for 61s. left unbounded, two of those
 // spend most of a run's time budget and every question after them goes unscored
 const MODEL_TIMEOUT_MS = 25_000
+
+// scored on the lite model, which is named in the results so a reader of the numbers
+// knows which model produced them
+const SCORING_MODEL = EVAL_MODEL
 
 // the route is allowed 300s. stop before the platform stops us, so the questions that did
 // run are still saved and scored instead of the whole run being lost
@@ -225,7 +226,7 @@ export async function POST(request: Request) {
           },
           contents: [{ role: 'user', parts: [{ text: q.question }] }],
         },
-        { maxAttempts: MODEL_ATTEMPTS, timeoutMs: MODEL_TIMEOUT_MS }
+        { maxAttempts: MODEL_ATTEMPTS, timeoutMs: MODEL_TIMEOUT_MS, model: SCORING_MODEL }
       )
 
       // a failed call used to score as a wrong answer
@@ -288,5 +289,6 @@ export async function POST(request: Request) {
     results,
     retrievalScore: score.retrievalAccuracy,
     answerScore: score.answerAccuracy,
+    model: SCORING_MODEL,
   })
 }

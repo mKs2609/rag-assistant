@@ -48,6 +48,9 @@ export default function EvalPanel({ documents }: { documents: Document[] }) {
   const [runningAll, setRunningAll] = useState(false)
   const [runningId, setRunningId] = useState<string | null>(null)
   const [results, setResults] = useState<Record<string, EvalResult>>({})
+  // the answers are scored on a different model from the one the chat uses, so the
+  // panel says which, rather than leaving a percentage to be read as the chat's
+  const [scoringModel, setScoringModel] = useState('')
   const [error, setError] = useState('')
   const [runs, setRuns] = useState<EvalRun[]>([])
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
@@ -173,6 +176,7 @@ export default function EvalPanel({ documents }: { documents: Document[] }) {
       next[r.questionId] = r
     }
     setResults((prev) => ({ ...prev, ...next }))
+    if (data.model) setScoringModel(data.model)
     // the run was just recorded, so the trend has one more point
     loadRuns()
   }
@@ -199,6 +203,7 @@ export default function EvalPanel({ documents }: { documents: Document[] }) {
     const result: EvalResult | undefined = data.results?.[0]
     if (result) {
       setResults((prev) => ({ ...prev, [questionId]: result }))
+      if (data.model) setScoringModel(data.model)
     }
   }
 
@@ -356,6 +361,13 @@ export default function EvalPanel({ documents }: { documents: Document[] }) {
 
           {/* a score from 2 of 22 questions is not the same claim as a score from 22, and
               without this the headline number looks identical in both cases */}
+          {scoringModel && (
+            <p className="text-xs text-bone/70">
+              Answers scored with <span className="font-mono">{scoringModel}</span>. Retrieval uses no
+              model at all.
+            </p>
+          )}
+
           {score.answerScored < score.total && (
             <p className="text-xs text-red-400">
               {score.total - score.answerScored} answer

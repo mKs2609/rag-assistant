@@ -6,31 +6,29 @@
 // complete, honest retrieval result, and throwing it away was hiding the half of the
 // system that works.
 
-const STOPWORDS = new Set([
-  'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'to',
-  'of', 'in', 'on', 'at', 'for', 'with', 'by', 'from', 'as', 'and', 'or',
-])
-
-export function significantWords(text: string): Set<string> {
+// every word in the answer, however short. an expected keyword was chosen deliberately by
+// whoever wrote the question, so it is matched whatever its length. dropping short words
+// is right when comparing two pieces of prose, which is what citation grounding does, but
+// here it meant a keyword like "17" could never be found and a correct answer scored as
+// wrong: "Support has 17 people" failed a question expecting 17.
+function wordsIn(text: string): Set<string> {
   return new Set(
     text
       .toLowerCase()
       .replace(/[^a-z0-9\s]/g, ' ')
       .split(/\s+/)
-      .filter((word) => word.length > 2 && !STOPWORDS.has(word))
+      .filter(Boolean)
   )
 }
 
 /** half the expected keywords is a pass, so one phrasing out of several still counts */
 export function answerIsCorrect(answer: string, expectedKeywords: string[]): boolean {
   if (expectedKeywords.length === 0) return true
-  const words = significantWords(answer)
-  const found = expectedKeywords.filter((keyword) => words.has(keyword.toLowerCase()))
-  return found.length / expectedKeywords.length >= 0.5
+  return keywordsFoundIn(answer, expectedKeywords).length / expectedKeywords.length >= 0.5
 }
 
 export function keywordsFoundIn(answer: string, expectedKeywords: string[]): string[] {
-  const words = significantWords(answer)
+  const words = wordsIn(answer)
   return expectedKeywords.filter((keyword) => words.has(keyword.toLowerCase()))
 }
 

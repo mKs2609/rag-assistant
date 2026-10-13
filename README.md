@@ -17,6 +17,10 @@
 
 *An answer built from the uploaded documents: markdown rendering, a chart whose every value was checked against the passage it came from, and the sources behind it.*
 
+![The evaluation harness](docs/screenshots/evaluation.png)
+
+*The project measures itself. Each saved question names the document it should find and the words the answer should contain, and the panel says which model produced the answers. Retrieval and answer coverage are counted separately, because searching needs no model at all. The scores shown are from a small demo workspace used for these screenshots, not a benchmark.*
+
 <details>
 <summary><b>More screenshots</b></summary>
 
@@ -25,10 +29,6 @@
 ![Checked citations under an answer](docs/screenshots/grounding.png)
 
 *Each source is shown with the passage it contributed. A citation is marked verified only when its wording matches the text it points at.*
-
-![The evaluation harness](docs/screenshots/evaluation.png)
-
-*Saved question and answer pairs, each naming the document it should find and the words the answer should contain, with accuracy charted across runs. Retrieval and answer coverage are reported separately, because searching does not need the model and the model is what runs out of free quota.*
 
 ![Sign in](docs/screenshots/login.png)
 
@@ -120,7 +120,7 @@ flowchart TD
 | Chart check | Each data point must name a source, and both its number and its label must appear in that passage |
 | Keyword index | A GIN index on `to_tsvector('english', content)`, without which every search scans every chunk |
 | Rate limits | Chat 15 per 5 min, uploads 10 per 10 min, evaluations 5 per 10 min, signups 5 per hour per IP |
-| Model quota | Gemini's free tier allows 5 requests a minute and 20 a day. An evaluation starts requests 12.5s apart to stay under the rate, does not retry inside a run, and stops asking once the daily allowance is gone |
+| Model quota | The chat model's free tier allows 5 requests a minute and 20 a day. Evaluations run on the lite model instead, which has its own allowance, so scoring a set never competes with the chat for the day's requests. A run paces requests 2s apart, does not retry inside a run, and stops asking once an allowance is gone |
 | Model thinking | The flash models reason before answering by default, measured at 19s a call against 3s without. Every answer here comes from passages already supplied, so requests ask for no thinking |
 
 ## Security
@@ -155,6 +155,8 @@ flowchart TD
 
 **Charts are verified like citations.** A fabricated chart is more convincing than a fabricated sentence, because people read a bar as data rather than as a claim. The model emits chart data as JSON naming the source of each point, and the server checks both the number and the label against that passage before anything is drawn. Points that fail are drawn as a dashed outline and flagged, not silently dropped. Verification runs on the server because the browser only receives a 150 character snippet of each source, far too little to check a number against.
 
+**Scoring on a different model from the one being scored.** A full evaluation needs one model call per question, and the chat model's free tier allows twenty a day shared with the chat itself, against a set of twenty-two questions. Twelve runs never once scored the whole set. The lite model answered fourteen back-to-back requests in eleven seconds with no rate limit and draws on a separate allowance, so evaluations run on it and the set completes in under thirty seconds. The panel names the scoring model beside the percentages, because a number produced by one model should not be read as a measurement of another.
+
 **Handling a busy model.** Gemini returns 503 when it is under load, and a single attempt failed often enough to be a problem. Requests now retry with backoff before giving up, and the user sees a short message rather than a raw API error. A failed question is removed from the chat instead of being left unanswered.
 
 ## Tech stack
@@ -167,7 +169,7 @@ flowchart TD
 | Auth | Supabase Auth |
 | File storage | Supabase Storage |
 | Embeddings | Voyage AI (`voyage-3.5`) |
-| LLM | Google Gemini |
+| LLM | Google Gemini (`flash` for answers, `flash-lite` for scoring evaluation runs) |
 | Deployment | Vercel |
 | Custom visuals | Raw WebGL via `ogl`, no animation library |
 | Tests | Vitest unit tests, and Playwright end-to-end tests in a real browser |

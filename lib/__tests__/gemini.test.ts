@@ -4,7 +4,9 @@ import {
   geminiFailure,
   geminiErrorMessage,
   retryAfter,
+  takesThinkingBudget,
   withoutThinking,
+  EVAL_MODEL,
 } from '@/lib/gemini'
 
 // what google actually sends back, trimmed to the part that names the quota
@@ -174,5 +176,28 @@ describe('answerText', () => {
     expect(answerText(reply([{ text: 'Engineering' }, {}, { text: ' has 42.' }]))).toBe(
       'Engineering has 42.'
     )
+  })
+})
+
+describe('takesThinkingBudget', () => {
+  it('asks the chat model not to think, because it does by default and it costs seconds', () => {
+    expect(takesThinkingBudget('gemini-flash-latest')).toBe(true)
+    expect(takesThinkingBudget('gemini-3.8-flash')).toBe(true)
+  })
+
+  it('leaves the lite models alone, which reject the field with a 400 rather than ignoring it', () => {
+    expect(takesThinkingBudget('gemini-flash-lite-latest')).toBe(false)
+    expect(takesThinkingBudget('gemini-3.5-flash-lite')).toBe(false)
+  })
+
+  it('reads the name whatever its case', () => {
+    expect(takesThinkingBudget('GEMINI-FLASH-LITE')).toBe(false)
+  })
+})
+
+describe('EVAL_MODEL', () => {
+  it('is a lite model, so a run draws on its own allowance rather than the chat quota', () => {
+    expect(EVAL_MODEL).toContain('lite')
+    expect(takesThinkingBudget(EVAL_MODEL)).toBe(false)
   })
 })

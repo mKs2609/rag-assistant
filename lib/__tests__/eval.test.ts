@@ -1,13 +1,24 @@
 import { describe, it, expect } from 'vitest'
-import { answerIsCorrect, keywordsFoundIn, rotate, scoreRun, significantWords } from '@/lib/eval'
+import { answerIsCorrect, keywordsFoundIn, rotate, scoreRun } from '@/lib/eval'
 
-describe('significantWords', () => {
-  it('drops the short and common words that match anything', () => {
-    expect([...significantWords('The answer is in the document')]).toEqual(['answer', 'document'])
+describe('matching a short keyword', () => {
+  // a real run scored both of these wrong. the answers were right, the scorer could not
+  // see a two character number because it reused the rules meant for comparing prose.
+  it('finds a two character number in the answer', () => {
+    expect(answerIsCorrect('Support has 17 people [1].', ['17'])).toBe(true)
+    expect(answerIsCorrect('24 people work in Operations [1].', ['24'])).toBe(true)
   })
 
-  it('ignores punctuation, so a word at the end of a sentence still counts', () => {
-    expect(significantWords('Issued March 2026.').has('2026')).toBe(true)
+  it('still needs the number to actually be there', () => {
+    expect(answerIsCorrect('Support has 42 people.', ['17'])).toBe(false)
+  })
+
+  it('matches a whole word, not a fragment of a longer number', () => {
+    expect(answerIsCorrect('The code is 1799.', ['17'])).toBe(false)
+  })
+
+  it('ignores punctuation around the keyword', () => {
+    expect(answerIsCorrect('Issued March 2026.', ['2026'])).toBe(true)
   })
 })
 
