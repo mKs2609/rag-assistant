@@ -1,10 +1,14 @@
 const GEMINI_MODEL = 'gemini-flash-latest'
 
-// the evaluation runs on the lite model instead. measured back to back it answered 14 of
-// 14 in 11 seconds with no rate limit at all, against five requests a minute and twenty a
-// day on the model the chat uses, and it draws on a separate allowance. a full run stops
-// competing with the chat for the same twenty requests.
+// the lite model has its own, far larger free allowance: fifteen requests a minute against
+// five, and nowhere near the twenty a day the chat model is capped at. the evaluation runs
+// on it so a scored set never competes with the chat, and the chat falls back to it when
+// the day's allowance is gone, so the app keeps answering instead of stopping.
+//
+// it is not a guess that this is good enough: it answered all 22 evaluation questions
+// correctly on 2026-10-14.
 export const EVAL_MODEL = 'gemini-flash-lite-latest'
+export const FALLBACK_MODEL = EVAL_MODEL
 
 // the lite models take no thinking budget, and reject the whole request with a 400 rather
 // than ignoring the field, so only the models that think are asked not to
@@ -54,6 +58,11 @@ export function answerText(data: unknown): string {
 export interface CallOptions {
   onRetry?: (attempt: number) => void
   maxAttempts?: number
+  /** tried once when the day's allowance for the main model is gone, so an out of quota
+   *  day degrades to a lighter model rather than refusing to answer at all */
+  fallbackModel?: string
+  /** told which model finally answered, when it was not the one asked for */
+  onFallback?: (model: string) => void
   /** give up on a single request after this long. a 503 has been seen to hang for 61s,
    *  which on a caller working through a list eats the time left for everything after it */
   timeoutMs?: number
@@ -70,7 +79,30 @@ export interface CallOptions {
 export async function callGemini(
   method: 'generateContent' | 'streamGenerateContent',
   body: unknown,
-  { onRetry, maxAttempts = MAX_ATTEMPTS, timeoutMs, model = GEMINI_MODEL }: CallOptions = {}
+  options: CallOptions = {}
+): Promise<Response> {
+  const { fallbackModel, onFallback, model = GEMINI_MODEL } = options
+  const res = await requestOnce(method, body, model, options)
+  if (res.ok || !fallbackModel || fallbackModel === model) return res
+
+  // running out of the day's allowance is the one failure another model can answer, so the
+  // app degrades to the lighter one instead of refusing for the rest of the day. read the
+  // body here because classifying the error needs it, and hand it back if we are not moving.
+  const errorBody = await res.text()
+  if (geminiFailure(res.status, errorBody) !== 'quota-daily') {
+    return new Response(errorBody, { status: res.status })
+  }
+
+  console.error(`${model} is out of quota for today, answering with ${fallbackModel}`)
+  onFallback?.(fallbackModel)
+  return requestOnce(method, body, fallbackModel, options)
+}
+
+async function requestOnce(
+  method: 'generateContent' | 'streamGenerateContent',
+  body: unknown,
+  model: string,
+  { onRetry, maxAttempts = MAX_ATTEMPTS, timeoutMs }: CallOptions
 ): Promise<Response> {
   const query = method === 'streamGenerateContent' ? '?alt=sse' : ''
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:${method}${query}`

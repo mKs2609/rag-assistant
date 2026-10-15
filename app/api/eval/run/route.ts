@@ -15,6 +15,9 @@ const EVAL_RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000
 // the first few failed with 429. voyage accepts up to 128 inputs per request.
 const EMBED_BATCH = 128
 
+// nothing stopped this hanging, and a run cannot start until it returns
+const EMBED_TIMEOUT_MS = 30_000
+
 // the lite model allows fifteen requests a minute, which it names as "limit: 15" against
 // GenerateRequestsPerMinutePerProjectPerModel. an earlier probe stopped at fourteen and
 // saw no limit at all, so this was first set to thirty a minute and a real run of 22
@@ -51,6 +54,7 @@ async function embedQueries(texts: string[]): Promise<number[][]> {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ input: batch, model: 'voyage-3.5', input_type: 'query' }),
+      signal: AbortSignal.timeout(EMBED_TIMEOUT_MS),
     })
     if (!res.ok) throw new Error(`Voyage API error (${res.status}): ${await res.text()}`)
     const data = await res.json()

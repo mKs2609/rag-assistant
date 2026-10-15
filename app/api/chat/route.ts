@@ -1,8 +1,13 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { answerText, callGemini, geminiErrorMessage } from '@/lib/gemini'
+import { answerText, callGemini, geminiErrorMessage, FALLBACK_MODEL } from '@/lib/gemini'
 import { isCitationGrounded, stripFencedBlocks } from '@/lib/citations'
 import { verifyChartsIn } from '@/lib/charts'
+import { isUuidList } from '@/lib/uuid'
+
+// embedding one question takes about a second. the model calls already give up after a
+// set time, because one was seen to hang for 61s, and nothing stopped this one doing the same
+const EMBED_TIMEOUT_MS = 20_000
 
 async function embedQuery(text: string): Promise<number[]> {
   const res = await fetch('https://api.voyageai.com/v1/embeddings', {
@@ -16,6 +21,7 @@ async function embedQuery(text: string): Promise<number[]> {
       model: 'voyage-3.5',
       input_type: 'query',
     }),
+    signal: AbortSignal.timeout(EMBED_TIMEOUT_MS),
   })
   if (!res.ok) {
     throw new Error(`Voyage API error (${res.status}): ${await res.text()}`)
@@ -68,6 +74,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Message is required' }, { status: 400 })
   }
 
+  // these reach a search function that casts them to uuid[], so a bad one raises in
+  // Postgres rather than simply matching nothing
+  const scopeIds = documentIds == null || (Array.isArray(documentIds) && documentIds.length === 0)
+    ? null
+    : documentIds
+  if (scopeIds !== null && !isUuidList(scopeIds)) {
+    return NextResponse.json({ error: 'documentIds must be a list of document ids' }, { status: 400 })
+  }
+
   let convoId = conversationId as string | undefined
   const isNewConversation = !convoId
   let history: { role: string; content: string }[] = []
@@ -99,7 +114,7 @@ export async function POST(request: Request) {
         tenant_id: profile.tenant_id,
         user_id: user.id,
         title: message.slice(0, 60),
-        document_ids: documentIds && documentIds.length > 0 ? documentIds : null,
+        document_ids: scopeIds,
       })
       .select()
       .single()
@@ -130,7 +145,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Could not save your message' }, { status: 500 })
   }
 
-  let scopedDocumentIds: string[] | null = documentIds && documentIds.length > 0 ? documentIds : null
+  let scopedDocumentIds: string[] | null = scopeIds
   if (conversationId && !scopedDocumentIds) {
     const { data: existingConvo } = await supabase
       .from('conversations')
@@ -190,6 +205,10 @@ export async function POST(request: Request) {
       const startedAt = Date.now()
 
       let matches: { id: string; document_id: string; content: string; filename: string }[] = []
+      // finding nothing and failing to look are different answers. without this, a voyage
+      // outage or a bad document filter reached the model as "No relevant documents were
+      // found", and the user was told their documents do not cover the question.
+      let searchFailed = false
       try {
         const embedStartedAt = Date.now()
         const queryEmbedding = await embedQuery(message)
@@ -230,6 +249,12 @@ export async function POST(request: Request) {
         matches = combined.slice(0, 6)
       } catch (err) {
         console.error('Retrieval failed:', err)
+        searchFailed = true
+      }
+
+      if (searchFailed) {
+        await fail('Could not search your documents just now. Please try again in a moment.')
+        return
       }
 
       const context = matches.length
@@ -261,6 +286,7 @@ ${context}`
       })
 
       let fullText = ''
+      let answeredBy = ''
       const modelStartedAt = Date.now()
 
       try {
@@ -270,7 +296,16 @@ ${context}`
             systemInstruction: { parts: [{ text: systemPrompt }] },
             contents: geminiContents,
           },
-          { onRetry: () => send({ type: 'status', status: 'The model is busy, retrying…' }) }
+          {
+            onRetry: () => send({ type: 'status', status: 'The model is busy, retrying…' }),
+            // the day's allowance is twenty requests shared by everyone, so without this
+            // the app simply stops answering once it is gone
+            fallbackModel: FALLBACK_MODEL,
+            onFallback: (model) => {
+              answeredBy = model
+              send({ type: 'status', status: 'Main model is out of quota, using the lighter one…' })
+            },
+          }
         )
 
         if (!geminiRes.ok || !geminiRes.body) {
@@ -366,6 +401,8 @@ ${context}`
 
       send({
         type: 'done',
+        // only set when the answer did not come from the usual model, so the reader knows
+        fallbackModel: answeredBy || undefined,
         conversationId: finalConvoId,
         sources,
         userMessageId,

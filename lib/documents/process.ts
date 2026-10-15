@@ -5,20 +5,42 @@ import { needsOcr, ocrPdf } from '@/lib/ocr'
 
 const INSERT_BATCH_SIZE = 200
 
-async function extractText(buffer: Buffer, filename: string): Promise<string> {
-  const ext = filename.split('.').pop()?.toLowerCase()
+// a batch of up to 128 chunks, so slower than embedding one question, but it still has to
+// end: processing runs against a deadline and a hung request would spend all of it
+const EMBED_TIMEOUT_MS = 60_000
 
-  if (ext === 'pdf') {
+const EMBED_ATTEMPTS = 4
+
+/** how a file should be read, or null when it is a type we cannot read at all */
+export function readAs(filename: string): 'pdf' | 'text' | null {
+  const ext = filename.split('.').pop()?.toLowerCase()
+  if (ext === 'pdf') return 'pdf'
+  if (ext === 'txt' || ext === 'md') return 'text'
+  return null
+}
+
+// a rate limit or a server fault is worth another attempt. a 400 means the request itself
+// is wrong, and sending it again just spends another one.
+export function shouldRetryEmbed(status: number, attempt: number): boolean {
+  return (status === 429 || status >= 500) && attempt < EMBED_ATTEMPTS
+}
+
+async function extractText(buffer: Buffer, filename: string): Promise<string> {
+  const how = readAs(filename)
+
+  if (how === 'pdf') {
     const pdf = await getDocumentProxy(new Uint8Array(buffer))
     const { text } = await extractPdfText(pdf, { mergePages: true })
     return text
   }
 
-  if (ext === 'txt' || ext === 'md') {
+  if (how === 'text') {
     return buffer.toString('utf-8')
   }
 
-  throw new Error(`Unsupported file type: .${ext}. Supported: .pdf, .txt, .md`)
+  throw new Error(
+    `Unsupported file type: .${filename.split('.').pop()?.toLowerCase()}. Supported: .pdf, .txt, .md`
+  )
 }
 
 function sleep(ms: number) {
@@ -37,12 +59,12 @@ async function embedBatch(texts: string[], attempt = 1): Promise<number[][]> {
       model: 'voyage-3.5',
       input_type: 'document',
     }),
+    signal: AbortSignal.timeout(EMBED_TIMEOUT_MS),
   })
 
   if (!res.ok) {
     const errText = await res.text()
-    const isRetryable = res.status === 429 || res.status >= 500
-    if (isRetryable && attempt < 4) {
+    if (shouldRetryEmbed(res.status, attempt)) {
       await sleep(attempt * 2000)
       return embedBatch(texts, attempt + 1)
     }

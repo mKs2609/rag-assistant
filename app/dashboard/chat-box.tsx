@@ -7,6 +7,8 @@ import { uploadDocumentDirect } from '@/lib/documents/upload-client'
 import { useSpeechRecognition } from '@/lib/hooks/useSpeechRecognition'
 import { useSpeechSynthesis } from '@/lib/hooks/useSpeechSynthesis'
 import { toSpokenText, toCopyText } from '@/lib/markdown'
+import { toPlainText, exportFilename } from '@/lib/conversation-export'
+import { readEvents } from '@/lib/stream'
 import AttachMenu from './attach-menu'
 import RichText from './rich-text'
 import {
@@ -36,6 +38,8 @@ interface Message {
   sources?: Source[]
   status?: string
   timings?: { embed: number; search: number; model: number; total: number }
+  /** set when the usual model was out of quota and a lighter one answered */
+  fallbackModel?: string
 }
 
 type StreamEvent =
@@ -49,6 +53,7 @@ type StreamEvent =
       assistantMessageId: string | null
       timings?: { embed: number; search: number; model: number; total: number }
       content?: string
+      fallbackModel?: string
     }
   | { type: 'error'; error?: string }
 
@@ -104,43 +109,13 @@ export default function ChatBox({
   const { speak, stop: stopSpeaking, speakingId, isSupported: speechSupported } = useSpeechSynthesis()
 
   function handleExport() {
-    const lines: string[] = []
-    lines.push('Conversation Export')
-    lines.push(new Date().toLocaleString())
-    lines.push('='.repeat(40))
-    lines.push('')
-
-    for (const m of messages) {
-      const who =
-        m.role === 'assistant'
-          ? 'Assistant:'
-          : m.userId === currentUserId
-            ? 'You:'
-            : m.userId
-              ? `${m.senderName ?? 'Someone'}:`
-              : 'Question:'
-      lines.push(who)
-      lines.push(m.content)
-
-      if (m.sources && m.sources.length > 0) {
-        lines.push('')
-        lines.push('Sources:')
-        m.sources.forEach((s, i) => {
-          const status = s.verified === true ? '(verified)' : s.verified === false ? '(unverified)' : ''
-          lines.push(`  [${i + 1}] ${s.filename} ${status}`)
-          lines.push(`      "${s.snippet}..."`)
-        })
-      }
-      lines.push('')
-      lines.push('-'.repeat(40))
-      lines.push('')
-    }
-
-    const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' })
+    const blob = new Blob([toPlainText(messages, currentUserId)], {
+      type: 'text/plain;charset=utf-8',
+    })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `conversation-${new Date().toISOString().slice(0, 10)}.txt`
+    a.download = exportFilename()
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
@@ -269,19 +244,10 @@ export default function ChatBox({
         const { done, value } = await reader.read()
         if (done) break
 
-        buffer += decoder.decode(value, { stream: true })
-        const lines = buffer.split('\n')
-        buffer = lines.pop() ?? ''
+        const read = readEvents<StreamEvent>(decoder.decode(value, { stream: true }), buffer)
+        buffer = read.rest
 
-        for (const line of lines) {
-          if (!line.trim()) continue
-          let event: StreamEvent
-          try {
-            event = JSON.parse(line)
-          } catch {
-            continue
-          }
-
+        for (const event of read.events) {
           if (event.type === 'status') {
             const status = event.status
             setMessages((prev) => {
@@ -299,6 +265,7 @@ export default function ChatBox({
             })
           } else if (event.type === 'done') {
             const { sources, userMessageId, assistantMessageId, timings, content } = event
+            const fallbackModel = event.fallbackModel
             onConversationChange(event.conversationId)
             setMessages((prev) => {
               const copy = [...prev]
@@ -312,6 +279,7 @@ export default function ChatBox({
                 timings,
                 id: assistantMessageId ?? undefined,
                 userId: currentUserId,
+                fallbackModel,
                 createdAt: new Date().toISOString(),
               }
               copy[copy.length - 2] = { ...copy[copy.length - 2], id: userMessageId }
@@ -472,6 +440,12 @@ export default function ChatBox({
                   ) : (
                     <div className="flex-1 min-w-0">
                       <RichText text={m.content} />
+                      {m.fallbackModel && (
+                        <p className="text-[11px] text-pewter mt-2">
+                          The usual model was out of quota today, so this was answered by{' '}
+                          <span className="font-mono">{m.fallbackModel}</span>.
+                        </p>
+                      )}
                       {m.timings && (
                         <p
                           className="text-[11px] text-pewter mt-2"

@@ -62,6 +62,7 @@ Most RAG tutorials stop at: embed one PDF, run a vector search, paste the result
 - Each answer shows how long it took, split by retrieval and model
 - Copy, re-ask, edit or delete any message from a row of buttons under it, with the time it was sent
 - Delete a question and its answer, with failed sends cleaned up automatically
+- When the main model's daily free allowance is gone the chat answers with the lighter model instead of stopping, and says so under the answer
 - Voice input and read-aloud using the browser's built-in speech APIs
 - Shared chats show who asked each question
 - Conversation history with rename, pin, delete, and plain-text export
@@ -120,7 +121,7 @@ flowchart TD
 | Chart check | Each data point must name a source, and both its number and its label must appear in that passage |
 | Keyword index | A GIN index on `to_tsvector('english', content)`, without which every search scans every chunk |
 | Rate limits | Chat 15 per 5 min, uploads 10 per 10 min, evaluations 5 per 10 min, signups 5 per hour per IP |
-| Model quota | The chat model's free tier allows 5 requests a minute and 20 a day. Evaluations run on the lite model instead, which allows 15 a minute on its own allowance, so scoring a set never competes with the chat for the day's requests. A run paces requests 4.5s apart, does not retry inside a run, and stops asking once an allowance is gone |
+| Model quota | The chat model's free tier allows 5 requests a minute and 20 a day, and the chat falls back to the lite model when the day's allowance is gone. Evaluations run on the lite model instead, which allows 15 a minute on its own allowance, so scoring a set never competes with the chat for the day's requests. A run paces requests 4.5s apart, does not retry inside a run, and stops asking once an allowance is gone |
 | Model thinking | The flash models reason before answering by default, measured at 19s a call against 3s without. Every answer here comes from passages already supplied, so requests ask for no thinking |
 
 ## Security
@@ -239,6 +240,9 @@ lib/
   gemini.ts      # gemini calls: retries, timeouts, quota messages, no thinking
   trend.ts       # geometry for the evaluation accuracy chart
   clipboard.ts   # copy to the clipboard, with a fallback for browsers without the API
+  stream.ts      # reassembling answer events split across network chunks
+  conversation-export.ts # building the plain text export of a chat
+  uuid.ts        # checking ids from a request before they reach Postgres
   time.ts        # short timestamps for the message buttons
   theme.ts       # the accent colour as a value, for props that need one
   ocr.ts         # OCR fallback for scanned PDFs
@@ -251,7 +255,7 @@ e2e/             # playwright end-to-end tests
 ## Known gaps
 
 - **Very long scans can still fail.** OCR reads 10 pages per request, one request at a time, within a 300 second budget. Gemini's response time varies a lot, so a scan of many dozens of pages may run out of time and be marked failed rather than finishing.
-- **Short numbers don't count toward citation checks.** Words of two characters or fewer are ignored, so a day of the month like `15` is never used to verify a citation.
+- **Short numbers don't count toward citation checks.** Words of two characters or fewer are ignored, so a day of the month like `15` is never used to verify a citation. Expected keywords in the evaluation are matched at any length, so this affects grounding only.
 
 ## Roadmap
 

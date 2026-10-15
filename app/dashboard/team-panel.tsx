@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useInlineRename } from '@/lib/hooks/useInlineRename'
 
 interface Member {
   id: string
@@ -80,13 +81,36 @@ export default function TeamPanel({
   // one open menu at a time: 'workspace' or a member id
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
 
-  const [editingWorkspaceName, setEditingWorkspaceName] = useState(false)
-  const [workspaceNameDraft, setWorkspaceNameDraft] = useState(workspaceName)
-  const [savingWorkspaceName, setSavingWorkspaceName] = useState(false)
+  const workspaceRename = useInlineRename(
+    async (name) => {
+      const res = await fetch('/api/tenants', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      })
+      if (res.ok) return (await res.json()).name as string
+      const data = await res.json().catch(() => ({}))
+      setError(data.error ?? 'Failed to rename workspace')
+      return null
+    },
+    (name) => onRenameWorkspace(name)
+  )
 
-  const [editingOwnName, setEditingOwnName] = useState(false)
-  const [ownNameDraft, setOwnNameDraft] = useState('')
-  const [savingOwnName, setSavingOwnName] = useState(false)
+  const ownRename = useInlineRename(
+    async (displayName) => {
+      const res = await fetch('/api/profile', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ displayName }),
+      })
+      if (res.ok) return (await res.json()).displayName as string
+      const data = await res.json().catch(() => ({}))
+      setError(data.error ?? 'Failed to update your name')
+      return null
+    },
+    (name) =>
+      setMembers((prev) => prev.map((m) => (m.id === currentUserId ? { ...m, display_name: name } : m)))
+  )
 
   const canManageInvites = currentUserRole === 'owner' || currentUserRole === 'admin'
   const canRemoveMembers = currentUserRole === 'owner'
@@ -126,65 +150,6 @@ export default function TeamPanel({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-
-  async function handleSaveWorkspaceName() {
-    const trimmed = workspaceNameDraft.trim()
-    if (!trimmed || trimmed === workspaceName) {
-      setEditingWorkspaceName(false)
-      setWorkspaceNameDraft(workspaceName)
-      return
-    }
-
-    setSavingWorkspaceName(true)
-    const res = await fetch('/api/tenants', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: trimmed }),
-    })
-    setSavingWorkspaceName(false)
-
-    if (res.ok) {
-      const data = await res.json()
-      onRenameWorkspace(data.name)
-      setEditingWorkspaceName(false)
-    } else {
-      const data = await res.json().catch(() => ({}))
-      setError(data.error ?? 'Failed to rename workspace')
-    }
-  }
-
-  function startEditingOwnName(currentName: string) {
-    setOpenMenuId(null)
-    setOwnNameDraft(currentName)
-    setEditingOwnName(true)
-  }
-
-  async function handleSaveOwnName() {
-    const trimmed = ownNameDraft.trim()
-    if (!trimmed) {
-      setEditingOwnName(false)
-      return
-    }
-
-    setSavingOwnName(true)
-    const res = await fetch('/api/profile', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ displayName: trimmed }),
-    })
-    setSavingOwnName(false)
-
-    if (res.ok) {
-      const data = await res.json()
-      setMembers((prev) =>
-        prev.map((m) => (m.id === currentUserId ? { ...m, display_name: data.displayName } : m))
-      )
-      setEditingOwnName(false)
-    } else {
-      const data = await res.json().catch(() => ({}))
-      setError(data.error ?? 'Failed to update your name')
-    }
-  }
 
   async function handleGenerateInvite() {
     setGenerating(true)
@@ -246,33 +211,27 @@ export default function TeamPanel({
   return (
     <div className="flex-1 overflow-y-auto thin-scroll px-4 sm:px-8 py-8 space-y-8">
       <div className="space-y-1">
-        {editingWorkspaceName ? (
+        {workspaceRename.editing ? (
           <div className="flex items-center gap-2">
             <input
               autoFocus
-              value={workspaceNameDraft}
-              onChange={(e) => setWorkspaceNameDraft(e.target.value)}
+              value={workspaceRename.draft}
+              onChange={(e) => workspaceRename.setDraft(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') handleSaveWorkspaceName()
-                if (e.key === 'Escape') {
-                  setEditingWorkspaceName(false)
-                  setWorkspaceNameDraft(workspaceName)
-                }
+                if (e.key === 'Enter') workspaceRename.commit(workspaceName)
+                if (e.key === 'Escape') workspaceRename.cancel()
               }}
               className="font-display text-2xl text-bone bg-inkwell border border-slate rounded px-2 py-1 outline-none"
             />
             <button
-              onClick={handleSaveWorkspaceName}
-              disabled={savingWorkspaceName}
+              onClick={() => workspaceRename.commit(workspaceName)}
+              disabled={workspaceRename.saving}
               className="text-accent text-sm hover:underline disabled:opacity-40"
             >
-              {savingWorkspaceName ? 'Saving…' : 'Save'}
+              {workspaceRename.saving ? 'Saving…' : 'Save'}
             </button>
             <button
-              onClick={() => {
-                setEditingWorkspaceName(false)
-                setWorkspaceNameDraft(workspaceName)
-              }}
+              onClick={workspaceRename.cancel}
               className="text-bone/70 text-sm hover:underline"
             >
               Cancel
@@ -295,8 +254,7 @@ export default function TeamPanel({
                     <button
                       onClick={() => {
                         setOpenMenuId(null)
-                        setWorkspaceNameDraft(workspaceName)
-                        setEditingWorkspaceName(true)
+                        workspaceRename.start(workspaceName)
                       }}
                       className="w-full text-left px-3 py-2 text-sm text-bone hover:bg-bone/10"
                     >
@@ -324,7 +282,7 @@ export default function TeamPanel({
             <ul className="space-y-1">
               {members.map((m) => {
                 const isMe = m.id === currentUserId
-                const isEditingThisName = isMe && editingOwnName
+                const isEditingThisName = isMe && ownRename.editing
                 const hasAnyMenuAction = isMe || (canRemoveMembers && !isMe && m.role !== 'owner')
 
                 return (
@@ -337,23 +295,23 @@ export default function TeamPanel({
                       <div className="flex items-center gap-2 flex-1 min-w-0">
                         <input
                           autoFocus
-                          value={ownNameDraft}
-                          onChange={(e) => setOwnNameDraft(e.target.value)}
+                          value={ownRename.draft}
+                          onChange={(e) => ownRename.setDraft(e.target.value)}
                           onKeyDown={(e) => {
-                            if (e.key === 'Enter') handleSaveOwnName()
-                            if (e.key === 'Escape') setEditingOwnName(false)
+                            if (e.key === 'Enter') ownRename.commit(m.display_name ?? '')
+                            if (e.key === 'Escape') ownRename.cancel()
                           }}
                           className="flex-1 min-w-0 bg-obsidian border border-slate rounded px-2 py-1 text-bone outline-none"
                         />
                         <button
-                          onClick={handleSaveOwnName}
-                          disabled={savingOwnName}
+                          onClick={() => ownRename.commit(m.display_name ?? '')}
+                          disabled={ownRename.saving}
                           className="text-accent text-xs hover:underline disabled:opacity-40 shrink-0"
                         >
-                          {savingOwnName ? 'Saving…' : 'Save'}
+                          {ownRename.saving ? 'Saving…' : 'Save'}
                         </button>
                         <button
-                          onClick={() => setEditingOwnName(false)}
+                          onClick={ownRename.cancel}
                           className="text-bone/70 text-xs hover:underline shrink-0"
                         >
                           Cancel
@@ -384,7 +342,7 @@ export default function TeamPanel({
                           <div className="absolute right-0 top-full mt-1 z-30 w-40 bg-inkwell border border-slate rounded-lg shadow-[rgba(4,4,7,0.25)_0px_2px_4px_0px,rgba(4,4,7,0.4)_0px_8px_24px_0px] py-1">
                             {isMe && (
                               <button
-                                onClick={() => startEditingOwnName(m.display_name ?? friendlyName(m))}
+                                onClick={() => { setOpenMenuId(null); ownRename.start(m.display_name ?? friendlyName(m)) }}
                                 className="w-full text-left px-3 py-2 text-sm text-accent hover:bg-bone/10"
                               >
                                 Edit name
