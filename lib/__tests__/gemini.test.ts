@@ -98,6 +98,15 @@ describe('geminiErrorMessage', () => {
   it('gives different advice for the two reasons a 429 happens', () => {
     expect(geminiErrorMessage(429, DAILY)).not.toBe(geminiErrorMessage(429, PER_MINUTE))
   })
+
+  // the end to end test waits for this phrase to tell a spent allowance, which is google's
+  // accounting, from a real fault in the pipeline. reword it here and that test starts failing
+  // weekly for the wrong reason, so the wording is pinned on this side too.
+  it('names the daily allowance in the words the end to end test looks for', () => {
+    expect(geminiErrorMessage(429, DAILY)).toContain('daily free quota')
+    expect(geminiErrorMessage(429, PER_DAY_NO_DELAY)).toContain('daily free quota')
+    expect(geminiErrorMessage(429, PER_MINUTE)).not.toContain('daily free quota')
+  })
 })
 
 describe('withoutThinking', () => {

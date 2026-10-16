@@ -1,10 +1,12 @@
 name: E2E
 
-# uses real Supabase, Voyage and Gemini, so it runs on demand and weekly rather than on every push
+# uses real Supabase, Voyage and Gemini, so it runs on demand and weekly rather than on every push.
+# 09:00 UTC is after the Gemini allowance resets at midnight Pacific, which 04:00 UTC was not: that
+# was late evening Pacific, so the run met an allowance the day's evaluation had already spent.
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 4 * * 1'
+    - cron: '0 9 * * 1'
 
 jobs:
   e2e:
@@ -30,6 +32,8 @@ jobs:
 
       - run: npx playwright install --with-deps chromium
 
+      # a spent Gemini allowance reports as skipped rather than failed, so a green run with four
+      # of five tests is the expected shape on a day the evaluation set has used the allowance
       - name: Run end-to-end tests
         run: npx playwright test
 

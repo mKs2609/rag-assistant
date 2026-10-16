@@ -309,8 +309,12 @@ ${context}`
         )
 
         if (!geminiRes.ok || !geminiRes.body) {
-          console.error(`Gemini error (${geminiRes.status}):`, await geminiRes.text())
-          await fail(geminiErrorMessage(geminiRes.status))
+          // the body says which allowance ran out and how long the wait is, so it is read once
+          // and passed on. without it every 429 reads as "try again in a minute", even the ones
+          // that mean "that is all for today"
+          const errorBody = await geminiRes.text()
+          console.error(`Gemini error (${geminiRes.status}):`, errorBody)
+          await fail(geminiErrorMessage(geminiRes.status, errorBody))
           return
         }
 
