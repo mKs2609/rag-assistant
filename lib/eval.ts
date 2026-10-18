@@ -32,6 +32,17 @@ export function keywordsFoundIn(answer: string, expectedKeywords: string[]): str
   return expectedKeywords.filter((keyword) => words.has(keyword.toLowerCase()))
 }
 
+// a question that names no expected document cannot fail retrieval, so scoring it as a hit
+// counted a question that was never a test. null means not measured, which scoreRun already
+// excludes rather than treating as a pass.
+export function retrievalHitFor(
+  expectedDocumentId: string | null | undefined,
+  retrievedDocumentIds: string[]
+): boolean | null {
+  if (!expectedDocumentId) return null
+  return retrievedDocumentIds.includes(expectedDocumentId)
+}
+
 /** null means the question was never measured, which is not the same as getting it wrong */
 export interface Outcome {
   retrievalHit: boolean | null

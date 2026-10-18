@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { answerIsCorrect, keywordsFoundIn, rotate, scoreRun } from '@/lib/eval'
+import { answerIsCorrect, keywordsFoundIn, retrievalHitFor, rotate, scoreRun } from '@/lib/eval'
 
 describe('matching a short keyword', () => {
   // a real run scored both of these wrong. the answers were right, the scorer could not
@@ -150,5 +150,40 @@ describe('rotate', () => {
   it('copes with an empty set and with one question', () => {
     expect(rotate([], 3)).toEqual([])
     expect(rotate(['only'], 7)).toEqual(['only'])
+  })
+})
+
+describe('retrievalHitFor', () => {
+  const retrieved = ['doc-a', 'doc-b', 'doc-c']
+
+  it('is a hit when the expected document came back', () => {
+    expect(retrievalHitFor('doc-b', retrieved)).toBe(true)
+  })
+
+  it('is a miss when it did not, which is the case worth catching', () => {
+    expect(retrievalHitFor('doc-z', retrieved)).toBe(false)
+  })
+
+  // this one was scored as a hit, so every question with no expected document was a free
+  // pass and the headline retrieval figure counted questions that could not fail
+  it('is not measured when the question names no expected document', () => {
+    expect(retrievalHitFor(null, retrieved)).toBeNull()
+    expect(retrievalHitFor(undefined, retrieved)).toBeNull()
+    expect(retrievalHitFor('', retrieved)).toBeNull()
+  })
+
+  it('is a miss, not a pass, when the search came back empty', () => {
+    expect(retrievalHitFor('doc-a', [])).toBe(false)
+  })
+
+  it('leaves an unmeasured question out of the accuracy rather than inflating it', () => {
+    const score = scoreRun([
+      { retrievalHit: true, answerCorrect: true },
+      { retrievalHit: false, answerCorrect: true },
+      { retrievalHit: retrievalHitFor(null, retrieved), answerCorrect: true },
+    ])
+    expect(score.retrievalScored).toBe(2)
+    expect(score.retrievalAccuracy).toBe(0.5)
+    expect(score.total).toBe(3)
   })
 })

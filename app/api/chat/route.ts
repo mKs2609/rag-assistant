@@ -4,6 +4,7 @@ import { answerText, callGemini, geminiErrorMessage, FALLBACK_MODEL } from '@/li
 import { isCitationGrounded, stripFencedBlocks } from '@/lib/citations'
 import { verifyChartsIn } from '@/lib/charts'
 import { isUuidList } from '@/lib/uuid'
+import { mergeMatches } from '@/lib/retrieval'
 
 // embedding one question takes about a second. the model calls already give up after a
 // set time, because one was seen to hang for 61s, and nothing stopped this one doing the same
@@ -31,6 +32,9 @@ async function embedQuery(text: string): Promise<number[]> {
 }
 
 const MAX_HISTORY_MESSAGES = 10
+
+// the evaluation harness scores on the same number
+const PASSAGES_PER_ANSWER = 6
 
 export async function POST(request: Request) {
   const supabase = await createClient()
@@ -235,18 +239,13 @@ export async function POST(request: Request) {
         if (vectorResult.error) throw new Error(vectorResult.error.message)
         if (keywordResult.error) console.error('Keyword search failed:', keywordResult.error.message)
 
-        const vectorMatches = vectorResult.data ?? []
-        const keywordMatches = keywordResult.data ?? []
-
-        const seen = new Set<string>()
-        const combined: typeof vectorMatches = []
-        for (const m of [...vectorMatches, ...keywordMatches]) {
-          if (!seen.has(m.id)) {
-            seen.add(m.id)
-            combined.push(m)
-          }
-        }
-        matches = combined.slice(0, 6)
+        // the evaluation harness merges with the same function, so what is measured and
+        // what is served cannot drift apart
+        matches = mergeMatches(
+          vectorResult.data ?? [],
+          keywordResult.data ?? [],
+          PASSAGES_PER_ANSWER
+        )
       } catch (err) {
         console.error('Retrieval failed:', err)
         searchFailed = true

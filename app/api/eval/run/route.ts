@@ -2,7 +2,15 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { answerText, callGemini, geminiErrorMessage, geminiFailure, EVAL_MODEL } from '@/lib/gemini'
-import { answerIsCorrect, keywordsFoundIn, rotate, scoreRun, type Outcome } from '@/lib/eval'
+import {
+  answerIsCorrect,
+  keywordsFoundIn,
+  retrievalHitFor,
+  rotate,
+  scoreRun,
+  type Outcome,
+} from '@/lib/eval'
+import { mergeMatches } from '@/lib/retrieval'
 
 // a full set is one gemini call per question, which needs more than the default
 export const maxDuration = 300
@@ -42,6 +50,15 @@ const SCORING_MODEL = EVAL_MODEL
 // the route is allowed 300s. stop before the platform stops us, so the questions that did
 // run are still saved and scored instead of the whole run being lost
 const TIME_BUDGET_MS = 260_000
+
+// the same number the chat keeps, so the harness scores what the product actually does
+const PASSAGES_PER_ANSWER = 6
+
+interface Chunk {
+  id: string
+  document_id: string
+  content: string
+}
 
 async function embedQueries(texts: string[]): Promise<number[][]> {
   const out: number[][] = []
@@ -176,25 +193,44 @@ export async function POST(request: Request) {
 
     // searching needs no model, so it is measured on its own and kept whatever follows
     let retrievalHit: boolean | null = null
-    let chunks: { document_id: string; content: string }[] = []
+    let chunks: Chunk[] = []
     let searchError = ''
 
-    const { data: matches, error: searchFailed } = await supabase.rpc('match_document_chunks', {
-      query_embedding: embeddings[i],
-      match_tenant_id: profile.tenant_id,
-      match_count: 5,
-      filter_document_ids: null,
-    })
+    // the same two searches the chat runs, merged the same way. scoring the vector search
+    // alone measured half the product: hybrid retrieval exists because vector search could
+    // not find an exact code, and a harness that skipped the keyword half could never see
+    // either the weakness or the fix.
+    const [vectorResult, keywordResult] = await Promise.all([
+      supabase.rpc('match_document_chunks', {
+        query_embedding: embeddings[i],
+        match_tenant_id: profile.tenant_id,
+        match_count: 5,
+        filter_document_ids: null,
+      }),
+      supabase.rpc('match_document_chunks_keyword', {
+        search_query: q.question,
+        match_tenant_id: profile.tenant_id,
+        match_count: 5,
+        filter_document_ids: null,
+      }),
+    ])
 
-    if (searchFailed) {
+    if (vectorResult.error) {
       // this used to pass silently as "no passages found", which then scored as a miss
-      console.error(`Search failed for "${q.question}":`, searchFailed.message)
+      console.error(`Search failed for "${q.question}":`, vectorResult.error.message)
       searchError = 'The search failed for this question, so it could not be scored.'
     } else {
-      chunks = (matches ?? []) as { document_id: string; content: string }[]
-      retrievalHit = q.expected_document_id
-        ? chunks.map((m) => m.document_id).includes(q.expected_document_id)
-        : true
+      if (keywordResult.error) console.error('Keyword search failed:', keywordResult.error.message)
+
+      chunks = mergeMatches(
+        (vectorResult.data ?? []) as Chunk[],
+        (keywordResult.data ?? []) as Chunk[],
+        PASSAGES_PER_ANSWER
+      )
+      retrievalHit = retrievalHitFor(
+        q.expected_document_id,
+        chunks.map((m) => m.document_id)
+      )
     }
 
     if (modelOutOfQuota || outOfTime || searchError) {
