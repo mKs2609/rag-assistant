@@ -194,7 +194,7 @@ VOYAGE_API_KEY=
 GEMINI_API_KEY=
 ```
 
-Create a Supabase project, then run the files in [`/schema`](schema) in order (`001` to `015`) in the SQL Editor. They create the tables, indexes, search functions, RLS policies and the storage bucket, and can be re-run safely. Then:
+Create a Supabase project, then run the files in [`/schema`](schema) in order (`001` to `016`) in the SQL Editor. They create the tables, indexes, search functions, RLS policies and the storage bucket, and can be re-run safely. Then:
 
 ```bash
 npm run dev

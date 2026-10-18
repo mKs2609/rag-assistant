@@ -22,8 +22,8 @@ on every push.
 
 The end-to-end run uses the real Gemini, whose free tier allows twenty requests a day on the main
 model. When that allowance is gone the question test reports skipped rather than failed, because a
-spent allowance is Google's accounting and not a fault here. So four of five tests passing with one
-skipped is a healthy weekly run. Anything else failing is real.
+spent allowance is Google's accounting and not a fault here. Only that one test needs the model, so
+six of seven passing with one skipped is a healthy weekly run. Anything else failing is real.
 
 ## Layout
 

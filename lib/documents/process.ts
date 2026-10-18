@@ -9,7 +9,16 @@ const INSERT_BATCH_SIZE = 200
 // end: processing runs against a deadline and a hung request would spend all of it
 const EMBED_TIMEOUT_MS = 60_000
 
-const EMBED_ATTEMPTS = 4
+// a rate limit here lasts a minute, so four attempts over seven seconds could never
+// outlast one. the waits below are sized to the window rather than to a transient blip.
+const EMBED_ATTEMPTS = 6
+
+/** how long to wait before attempt n. a 429 waits out the per minute window; anything
+ *  else is treated as a transient fault and backs off quickly. */
+export function embedRetryDelayMs(status: number, attempt: number): number {
+  if (status === 429) return 22_000
+  return Math.min(attempt * 2000, 8000)
+}
 
 /** how a file should be read, or null when it is a type we cannot read at all */
 export function readAs(filename: string): 'pdf' | 'text' | null {
@@ -23,6 +32,31 @@ export function readAs(filename: string): 'pdf' | 'text' | null {
 // is wrong, and sending it again just spends another one.
 export function shouldRetryEmbed(status: number, attempt: number): boolean {
   return (status === 429 || status >= 500) && attempt < EMBED_ATTEMPTS
+}
+
+// what the uploader is told when processing fails. the raw error is kept in the server log,
+// because it names upstream services, quotas and in one case a billing page, and none of
+// that belongs in a tenant's document list. this says what happened and what to do about it.
+export function processingFailureReason(error: unknown): string {
+  const raw = error instanceof Error ? error.message : String(error ?? '')
+
+  if (/Unsupported file type/i.test(raw)) return raw
+  if (/Ran out of time/i.test(raw)) {
+    return 'This document was too long to finish processing in one go. Try splitting it into smaller files.'
+  }
+  if (/No extractable text/i.test(raw)) {
+    return 'No text could be read from this file. If it is a scan, the page images could not be read either.'
+  }
+  if (/Voyage API error \(429\)/i.test(raw)) {
+    return 'The embedding service was rate limited while processing this document. Please try again in a few minutes.'
+  }
+  if (/Voyage API error/i.test(raw)) {
+    return 'The embedding service could not process this document. Please try again.'
+  }
+  if (/Download failed/i.test(raw) || /storage/i.test(raw)) {
+    return 'The uploaded file could not be read back from storage. Please upload it again.'
+  }
+  return 'Something went wrong while processing this document. Please try uploading it again.'
 }
 
 async function extractText(buffer: Buffer, filename: string): Promise<string> {
@@ -65,7 +99,7 @@ async function embedBatch(texts: string[], attempt = 1): Promise<number[][]> {
   if (!res.ok) {
     const errText = await res.text()
     if (shouldRetryEmbed(res.status, attempt)) {
-      await sleep(attempt * 2000)
+      await sleep(embedRetryDelayMs(res.status, attempt))
       return embedBatch(texts, attempt + 1)
     }
     throw new Error(`Voyage API error (${res.status}): ${errText}`)
@@ -75,12 +109,29 @@ async function embedBatch(texts: string[], attempt = 1): Promise<number[][]> {
   return data.data.map((d: { embedding: number[] }) => d.embedding)
 }
 
-async function getEmbeddings(texts: string[]): Promise<number[][]> {
+// what must be left after the last batch to write the chunks and set the status
+const EMBED_TIME_RESERVE_MS = 30_000
+
+/** enough time for another batch, including a rate limit wait, and the writing afterwards */
+export function canEmbedAnotherBatch(now: number, deadline: number): boolean {
+  return now + embedRetryDelayMs(429, 1) + EMBED_TIME_RESERVE_MS < deadline
+}
+
+async function getEmbeddings(texts: string[], deadline = Infinity): Promise<number[][]> {
   const batches = batchChunks(texts)
   const embeddings: number[][] = []
 
   for (let i = 0; i < batches.length; i++) {
     if (i > 0) await sleep(300)
+    // waiting out a rate limit is slow by design, so a long document can run into the
+    // platform's limit. stopping here marks it failed, which the user can see and retry.
+    // running on until the function is killed left it on "processing" for ever.
+    if (!canEmbedAnotherBatch(Date.now(), deadline)) {
+      throw new Error(
+        `Ran out of time after ${i} of ${batches.length} batches. The free embedding tier allows ` +
+          `10,000 tokens a minute, so a document this long needs more time than one request has.`
+      )
+    }
     embeddings.push(...(await embedBatch(batches[i])))
   }
 
@@ -137,7 +188,7 @@ export async function processDocument(documentId: string, deadline = Infinity) {
     }
 
     const chunks = chunkText(text)
-    const embeddings = await getEmbeddings(chunks)
+    const embeddings = await getEmbeddings(chunks, deadline)
 
     const rows = chunks.map((content, i) => ({
       tenant_id: doc.tenant_id,
@@ -154,9 +205,12 @@ export async function processDocument(documentId: string, deadline = Infinity) {
       if (insertError) throw new Error(insertError.message)
     }
 
-    await admin.from('documents').update({ status: 'ready' }).eq('id', documentId)
+    await admin.from('documents').update({ status: 'ready', error: null }).eq('id', documentId)
   } catch (err) {
     console.error('processDocument failed:', err)
-    await admin.from('documents').update({ status: 'failed' }).eq('id', documentId)
+    await admin
+      .from('documents')
+      .update({ status: 'failed', error: processingFailureReason(err) })
+      .eq('id', documentId)
   }
 }

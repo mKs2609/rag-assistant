@@ -8,6 +8,8 @@ interface Document {
   filename: string
   status: string
   uploaded_by: string | null
+  /** why processing failed, in words for the uploader. null unless status is failed */
+  error?: string | null
 }
 
 const statusColor: Record<string, string> = {
@@ -89,36 +91,36 @@ export default function DocumentList({
       {documents.length ? (
         <ul className="space-y-0.5 max-h-32 overflow-y-auto thin-scroll">
           {documents.map((doc) => (
-            <li key={doc.id} className="group flex items-center gap-2 px-1 py-1 text-xs">
-              <span
-                className={
-                  `w-1.5 h-1.5 rounded-full shrink-0 ${statusColor[doc.status] ?? 'bg-fog'} ` +
-                  (doc.status === 'processing' ? 'animate-pulse' : '')
-                }
-                title={statusLabel[doc.status] ?? doc.status}
-              />
-              <span className="flex-1 truncate text-fog" title={doc.filename}>
-                {doc.filename}
-              </span>
-              {doc.status === 'processing' && (
-                <span className="text-pewter shrink-0">processing…</span>
-              )}
-              {doc.status === 'failed' && (
+            <li key={doc.id} className="group px-1 py-1 text-xs">
+              <div className="flex items-center gap-2">
                 <span
-                  className="text-red-400 shrink-0"
-                  title="Text extraction or embedding failed for this file"
-                >
-                  failed
+                  className={
+                    `w-1.5 h-1.5 rounded-full shrink-0 ${statusColor[doc.status] ?? 'bg-fog'} ` +
+                    (doc.status === 'processing' ? 'animate-pulse' : '')
+                  }
+                  title={statusLabel[doc.status] ?? doc.status}
+                />
+                <span className="flex-1 truncate text-fog" title={doc.filename}>
+                  {doc.filename}
                 </span>
-              )}
-              {canDelete(doc) && (
-                <button
-                  onClick={() => handleDelete(doc.id)}
-                  disabled={deletingId === doc.id}
-                  className="text-red-400 hover:underline disabled:opacity-40 shrink-0"
-                >
-                  {deletingId === doc.id ? '…' : 'Delete'}
-                </button>
+                {doc.status === 'processing' && (
+                  <span className="text-pewter shrink-0">processing…</span>
+                )}
+                {doc.status === 'failed' && <span className="text-red-400 shrink-0">failed</span>}
+                {canDelete(doc) && (
+                  <button
+                    onClick={() => handleDelete(doc.id)}
+                    disabled={deletingId === doc.id}
+                    className="text-red-400 hover:underline disabled:opacity-40 shrink-0"
+                  >
+                    {deletingId === doc.id ? '…' : 'Delete'}
+                  </button>
+                )}
+              </div>
+              {/* the reason sits on its own line rather than in a tooltip, because a
+                  failure you have to hover to understand is one you will not act on */}
+              {doc.status === 'failed' && doc.error && (
+                <p className="pl-[14px] pt-0.5 text-pewter leading-snug">{doc.error}</p>
               )}
             </li>
           ))}
