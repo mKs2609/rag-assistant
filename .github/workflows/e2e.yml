@@ -32,6 +32,25 @@ jobs:
 
       - run: npx playwright install --with-deps chromium
 
+      # without this, missing secrets surface as a one second stack trace out of the
+      # playwright config, which reads like a broken test rather than an unconfigured
+      # repository. this ran red every week for a month before anyone noticed the
+      # difference.
+      - name: Check the secrets are configured
+        run: |
+          missing=""
+          for key in E2E_SUPABASE_URL E2E_SUPABASE_ANON_KEY E2E_SUPABASE_SERVICE_ROLE_KEY VOYAGE_API_KEY GEMINI_API_KEY; do
+            if [ -z "${!key}" ]; then missing="$missing $key"; fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::These repository secrets are not set:$missing"
+            echo "Add them under Settings, Secrets and variables, Actions."
+            echo "The Supabase values must come from the separate end-to-end project,"
+            echo "never from the real one: these tests create and delete users and workspaces."
+            exit 1
+          fi
+          echo "All five secrets are present."
+
       # a spent Gemini allowance reports as skipped rather than failed, so a green run with four
       # of five tests is the expected shape on a day the evaluation set has used the allowance
       - name: Run end-to-end tests

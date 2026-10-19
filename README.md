@@ -43,9 +43,9 @@
 Most RAG tutorials stop at: embed one PDF, run a vector search, paste the result into a prompt. That is a fine starting point, and it is also where most student projects end. This one goes further on the parts that matter once more than one person uses it:
 
 - **Multi-tenant from the database up.** Every table and the storage bucket enforce workspace isolation with Postgres Row-Level Security, not application-level `if` statements that are easy to forget. The full schema, including every policy, is in [`/schema`](schema).
-- **Hybrid retrieval, not just vector search.** Embedding search is weak at exact lookups such as a certificate code or an ID number. This runs pgvector cosine similarity and Postgres full-text search side by side and merges the results, because they catch different kinds of questions.
+- **Hybrid retrieval, not just vector search.** Embedding search is weak at exact lookups such as a certificate code or an ID number. This runs pgvector cosine similarity and Postgres full-text search side by side and merges the results. Measured as an ablation over 39 scored questions: vector-only 90%, full-text-only 21%, both 100%. On bare identifier lookups specifically, vector search found 0 of 5 and full-text found 4 of 5.
 - **Citations are checked, not trusted.** After the model answers, each citation is compared against the text it claims to be quoting, and answers show a verified or unverified badge per source.
-- **It measures itself.** A built-in evaluation harness scores retrieval and answer accuracy against saved question and answer pairs, so changes can be checked instead of guessed at.
+- **It measures itself.** A built-in evaluation harness scores retrieval and answer accuracy against saved question and answer pairs, so changes can be checked instead of guessed at. The current set is 41 questions over a 272-chunk corpus, last scoring 100% on both. The set size is quoted with the score deliberately: a bare percentage says nothing without knowing how many questions it was over, or how hard they were.
 - **Rate limiting on every endpoint that costs money:** chat, upload, evaluation runs, and signup.
 - **A real infrastructure limit, solved rather than worked around.** Vercel caps serverless request bodies at 4.5MB, which breaks file uploads. Uploads now go straight from the browser to storage, and only small metadata passes through the function. See [Engineering decisions](#engineering-decisions) below.
 
@@ -80,6 +80,7 @@ Most RAG tutorials stop at: embed one PDF, run a vector search, paste the result
 - Each run starts one question further along, so the questions at the end are not the ones permanently left unscored when the time budget runs out
 - Questions the model never reached read as "not scored" rather than as failures, and each coverage is reported with its own number
 - Every full run is stored, so the panel charts accuracy across runs instead of only the latest
+- The current set is 41 questions over a 272-chunk corpus: exact identifiers, paraphrase, arithmetic the documents do not state, cross-document comparisons, distractors, and questions the documents genuinely cannot answer
 
 **Documents**
 - PDF, TXT and MD up to 10MB, uploaded straight from the browser to storage
@@ -142,7 +143,19 @@ flowchart TD
 
 **The 4.5MB wall.** Uploads worked locally and then failed in production for anything over a few megabytes, with no error from my own code. Vercel enforces a 4.5MB request body limit on serverless functions at the infrastructure level, and no application config overrides it. The fix was to take the file out of the request entirely. The browser uploads directly to Supabase Storage under the same RLS policies that already govern workspace access, and only a storage path and filename go through the function.
 
-**Why hybrid retrieval.** Testing with real documents, such as certificates containing codes like `9977287`, showed that vector search sometimes missed the chunk holding an exact code, because embeddings capture meaning rather than exact tokens. Running Postgres full-text search alongside it closed the gap without adding infrastructure, since full-text search is already part of Postgres.
+**Why hybrid retrieval, and what it is worth.** Testing with real documents, such as certificates containing codes like `9977287`, showed that vector search sometimes missed the chunk holding an exact code, because embeddings capture meaning rather than exact tokens. Running Postgres full-text search alongside it closed the gap without adding infrastructure, since full-text search is already part of Postgres.
+
+That was a judgement call made from watching it fail, so it was measured afterwards as an ablation: the same 272-chunk corpus and the same budget of 6 passages, changing only the search method. Of the 41 questions in the set, 39 name an expected document and so can be scored for retrieval; the other two span several documents and are deliberately left unscored rather than counted as free passes.
+
+| Retrieval method | Expected document retrieved |
+| --- | --- |
+| Vector search only | 90% (35/39) |
+| Full-text search only | 21% (8/39) |
+| Both, merged, what ships | **100% (39/39)** |
+
+The four questions hybrid retrieval rescues are all bare identifier lookups, the case it was added for. Tested on their own, with the code pasted and no sentence around it, **vector search found 0 of 5 and full-text search found 4 of 5**.
+
+Worth saying plainly: the first run of this ablation reported hybrid retrieval as worthless, because vector-only also scored 100%. Every question in the set was a full sentence, and vector search handles those well, so the set could not see the one case the feature exists for. Adding identifier questions is what made the measurement honest. A result saying a feature does nothing is a claim about the test set as much as about the feature.
 
 **Citation verification for free.** The usual approach is a second LLM call, which costs money per check and adds latency. This compares the significant words of a cited sentence against the source chunk instead. It is less sophisticated than a model-based check, but it catches the failure that matters, a citation that does not match its source, at no extra cost.
 
@@ -156,7 +169,7 @@ flowchart TD
 
 **Charts are verified like citations.** A fabricated chart is more convincing than a fabricated sentence, because people read a bar as data rather than as a claim. The model emits chart data as JSON naming the source of each point, and the server checks both the number and the label against that passage before anything is drawn. Points that fail are drawn as a dashed outline and flagged, not silently dropped. Verification runs on the server because the browser only receives a 150 character snippet of each source, far too little to check a number against.
 
-**Scoring on a different model from the one being scored.** A full evaluation needs one model call per question, and the chat model's free tier allows twenty a day shared with the chat itself, against a set of twenty-two questions. Twelve runs never once scored the whole set. The lite model allows fifteen requests a minute on a separate allowance, so evaluations run on it and a full set completes in under two minutes without touching the chat's budget. The panel names the scoring model beside the percentages, because a number produced by one model should not be read as a measurement of another.
+**Scoring on a different model from the one being scored.** A full evaluation needs one model call per question, and the chat model's free tier allows twenty a day shared with the chat itself, against a set that was twenty-two questions at the time and is now forty-one. Twelve runs never once scored the whole set. The lite model allows fifteen requests a minute on a separate allowance, so evaluations run on it and a full set completes in under two minutes without touching the chat's budget. The panel names the scoring model beside the percentages, because a number produced by one model should not be read as a measurement of another.
 
 **Handling a busy model.** Gemini returns 503 when it is under load, and a single attempt failed often enough to be a problem. Requests now retry with backoff before giving up, and the user sees a short message rather than a raw API error. A failed question is removed from the chat instead of being left unanswered.
 
