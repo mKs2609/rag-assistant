@@ -45,7 +45,7 @@ Most RAG tutorials stop at: embed one PDF, run a vector search, paste the result
 - **Multi-tenant from the database up.** Every table and the storage bucket enforce workspace isolation with Postgres Row-Level Security, not application-level `if` statements that are easy to forget. The full schema, including every policy, is in [`/schema`](schema).
 - **Hybrid retrieval, not just vector search.** Embedding search is weak at exact lookups such as a certificate code or an ID number. This runs pgvector cosine similarity and Postgres full-text search side by side and merges the results. Measured as an ablation over 39 scored questions: vector-only 90%, full-text-only 21%, both 100%. On bare identifier lookups specifically, vector search found 0 of 5 and full-text found 4 of 5.
 - **Citations are checked, not trusted.** After the model answers, each citation is compared against the text it claims to be quoting, and answers show a verified or unverified badge per source.
-- **It measures itself.** A built-in evaluation harness scores retrieval and answer accuracy against saved question and answer pairs, so changes can be checked instead of guessed at. The current set is 41 questions over a 272-chunk corpus, last scoring 100% on both. The set size is quoted with the score deliberately: a bare percentage says nothing without knowing how many questions it was over, or how hard they were.
+- **It measures itself.** A built-in evaluation harness scores retrieval and answer accuracy against saved question and answer pairs, so changes can be checked instead of guessed at. The current set is 41 questions over a 272-chunk corpus. The last run answered 41 of 41 correctly and retrieved the right document for 39 of 39, which is every question that names one; the remaining two span several documents, so they are left unscored for retrieval rather than counted as passes. The counts are quoted alongside the percentages deliberately: a bare 100% says nothing without knowing how many questions it was over, and which of them could fail.
 - **Rate limiting on every endpoint that costs money:** chat, upload, evaluation runs, and signup.
 - **A real infrastructure limit, solved rather than worked around.** Vercel caps serverless request bodies at 4.5MB, which breaks file uploads. Uploads now go straight from the browser to storage, and only small metadata passes through the function. See [Engineering decisions](#engineering-decisions) below.
 
@@ -60,9 +60,10 @@ Most RAG tutorials stop at: embed one PDF, run a vector search, paste the result
 - Answers render as real markdown: headings, tables, bulleted and numbered lists, code blocks
 - Charts when an answer compares several numbers, with every value checked against the passage it came from
 - Each answer shows how long it took, split by retrieval and model
-- Copy, re-ask, edit or delete any message from a row of buttons under it, with the time it was sent
+- A row of controls under every message: a question can be copied, asked again, edited and asked again, or deleted; an answer can be copied as readable text or read aloud. Each shows the time it was sent
 - Delete a question and its answer, with failed sends cleaned up automatically
 - When the main model's daily free allowance is gone the chat answers with the lighter model instead of stopping, and says so under the answer
+- If the search itself fails, the answer stops and says so, rather than letting the model answer from no reference material at all
 - Voice input and read-aloud using the browser's built-in speech APIs
 - Shared chats show who asked each question
 - Conversation history with rename, pin, delete, and plain-text export
@@ -86,7 +87,8 @@ Most RAG tutorials stop at: embed one PDF, run a vector search, paste the result
 - PDF, TXT and MD up to 10MB, uploaded straight from the browser to storage
 - Scanned PDFs fall back to OCR, so image-only documents are still searchable. Long scans are read 10 pages at a time
 - Processing runs in the background, so uploads return immediately and the list updates itself
-- Embeddings are sent in batches, so large documents don't exceed the provider's per-request limit
+- Embeddings are sent in small batches, sized for the embedding tier's tokens-per-minute limit rather than its per-request limit, which is what actually binds
+- A document that fails to process says why, in words meant for the uploader, instead of only showing "failed"
 
 ## Architecture
 
@@ -115,7 +117,7 @@ flowchart TD
 | Step | Detail |
 |---|---|
 | Chunking | 1000 characters with 150 characters of overlap |
-| Embeddings | Voyage AI `voyage-3.5`, 1024 dimensions, in batches of up to 128 chunks |
+| Embeddings | Voyage AI `voyage-3.5`, 1024 dimensions. Batches are capped at 25,000 characters, roughly 25 chunks, because the free tier allows 10,000 tokens a minute and that binds long before the 128-input per-request cap |
 | Retrieval | Top 5 by vector similarity plus top 5 by full-text search, merged and deduped to 6 |
 | Conversation memory | The last 10 messages are replayed to the model |
 | Citation check | A citation is verified when at least 30% of the sentence's significant words appear in the cited chunk |
@@ -156,6 +158,10 @@ That was a judgement call made from watching it fail, so it was measured afterwa
 The four questions hybrid retrieval rescues are all bare identifier lookups, the case it was added for. Tested on their own, with the code pasted and no sentence around it, **vector search found 0 of 5 and full-text search found 4 of 5**.
 
 Worth saying plainly: the first run of this ablation reported hybrid retrieval as worthless, because vector-only also scored 100%. Every question in the set was a full sentence, and vector search handles those well, so the set could not see the one case the feature exists for. Adding identifier questions is what made the measurement honest. A result saying a feature does nothing is a claim about the test set as much as about the feature.
+
+**The limit I was not watching.** A 163-chunk document would not upload. Small files were fine, the file reached storage, and the list said only `failed`. The error body had the answer: the embedding free tier allows **3 requests a minute and 10,000 tokens a minute**, and the second one binds. At roughly 227 tokens per 1000-character chunk, a minute buys about 44 chunks, while the pipeline was batching up to 128 chunks, around 29,000 tokens, in a single request. Such a request can never succeed, so waiting did not help and retrying only spent attempts. Any document over about 44 chunks failed permanently. Three fixes: batch for the limit that binds, wait out the window on a rate limit rather than backing off two seconds against a limit lasting sixty, and stop cleanly when the function's deadline is near instead of being killed mid-embed and leaving the document stuck on "processing".
+
+**Saying why, not just that.** That took far longer to diagnose than it should have, because the pipeline knew exactly what had gone wrong and discarded it: the reason went to a server log and the document row only recorded `failed`. It is now stored and shown under the filename. The translation matters as much as the storage, since the raw rate-limit body names the provider, the quota tier and a billing page, and none of that belongs in a tenant's document list. A test asserts those words never reach the uploader.
 
 **Citation verification for free.** The usual approach is a second LLM call, which costs money per check and adds latency. This compares the significant words of a cited sentence against the source chunk instead. It is less sophisticated than a model-based check, but it catches the failure that matters, a citation that does not match its source, at no extra cost.
 
@@ -225,7 +231,9 @@ npm run test:e2e   # playwright, see below
 
 ### End-to-end tests
 
-These drive a real browser through login, uploading a document, asking about it, and deleting the question. They create and delete users and data, so they need **their own Supabase project**, never the real one, and they refuse to start if pointed at the project in `.env.local`.
+Seven tests drive a real browser: the four auth paths, a document that failed to process showing its reason without leaking the upstream error, a document that processed normally showing none, and the full pipeline of uploading a document, asking about it, getting a cited answer and deleting the question. Only that last one needs the language model, so the rest run whatever is left of the day's allowance.
+
+They create and delete users and data, so they need **their own Supabase project**, never the real one, and they refuse to start if pointed at the project in `.env.local`.
 
 1. Create a second Supabase project and run the `/schema` files in it
 2. Copy `.env.e2e.example` to `.env.e2e` and fill in that project's URL and keys
@@ -250,6 +258,7 @@ lib/
   charts.ts      # chart grounding, and writing verdicts back into an answer
   markdown.ts    # parses an answer into blocks, including charts
   eval.ts        # scoring a run, retrieval and answer counted separately, question rotation
+  retrieval.ts   # merging the two searches, shared by the chat and the evaluation harness
   gemini.ts      # gemini calls: retries, timeouts, quota messages, no thinking
   trend.ts       # geometry for the evaluation accuracy chart
   clipboard.ts   # copy to the clipboard, with a fallback for browsers without the API
@@ -268,6 +277,7 @@ e2e/             # playwright end-to-end tests
 ## Known gaps
 
 - **Very long scans can still fail.** OCR reads 10 pages per request, one request at a time, within a 300 second budget. Gemini's response time varies a lot, so a scan of many dozens of pages may run out of time and be marked failed rather than finishing.
+- **Large uploads are slow on the free embedding tier.** Batches are sized for 10,000 tokens a minute, so a 160-chunk document spends around three minutes embedding inside a five-minute function budget. It completes, but there is not much headroom; a paid embedding tier removes the constraint entirely.
 - **Short numbers don't count toward citation checks.** Words of two characters or fewer are ignored, so a day of the month like `15` is never used to verify a citation. Expected keywords in the evaluation are matched at any length, so this affects grounding only.
 
 ## Roadmap
