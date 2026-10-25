@@ -19,7 +19,7 @@
 
 ![The evaluation harness](docs/screenshots/evaluation.png)
 
-*The project measures itself. Each saved question names the document it should find and the words the answer should contain, and the panel says which model produced the answers. Retrieval and answer coverage are counted separately, because searching needs no model at all. The scores shown are from a small demo workspace used for these screenshots, not a benchmark.*
+*The project measures itself. Each saved question names the document it should find and the words the answer should contain, and the panel says which model produced the answers. Retrieval and answer coverage are counted separately, because searching needs no model at all, and every run is kept so the scores can be compared over time rather than judged one at a time. The ten questions shown are a small demo workspace used for these screenshots, not the 41-question set the figures elsewhere in this README come from.*
 
 <details>
 <summary><b>More screenshots</b></summary>
@@ -30,9 +30,9 @@
 
 *Each source is shown with the passage it contributed. A citation is marked verified only when its wording matches the text it points at.*
 
-![Sign in](docs/screenshots/login.png)
+![Create a workspace](docs/screenshots/signup.png)
 
-*The auth pages, with a WebGL background drawn without an animation library.*
+*Signing up creates the account and its workspace in one step, which is where the multi-tenancy starts. The background is raw WebGL, drawn without an animation library.*
 
 </details>
 

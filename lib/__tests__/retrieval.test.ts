@@ -15,8 +15,8 @@ describe('mergeMatches', () => {
   })
 
   it('keeps a keyword only result, which is the whole reason both searches run', () => {
-    const merged = mergeMatches([chunk('a')], [chunk('code-9977388')], 6)
-    expect(merged.map((m) => m.id)).toContain('code-9977388')
+    const merged = mergeMatches([chunk('a')], [chunk('code-ABC123')], 6)
+    expect(merged.map((m) => m.id)).toContain('code-ABC123')
   })
 
   it('stops at the number asked for, so the prompt cannot grow without bound', () => {
