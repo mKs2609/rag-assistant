@@ -13,11 +13,11 @@
 
 ---
 
-![Answering a question with a grounded chart](docs/screenshots/chat.png)
+![Answering a question with a grounded chart](docs/images/chat.png)
 
 *An answer built from the uploaded documents: markdown rendering, a chart whose every value was checked against the passage it came from, and the sources behind it.*
 
-![The evaluation harness](docs/screenshots/evaluation.png)
+![The evaluation harness](docs/images/evaluation.png)
 
 *The project measures itself. Each saved question names the document it should find and the words the answer should contain, and the panel says which model produced the answers. Retrieval and answer coverage are counted separately, because searching needs no model at all, and every run is kept so the scores can be compared over time rather than judged one at a time. The ten questions shown are a small demo workspace used for these screenshots, not the 41-question set the figures elsewhere in this README come from.*
 
@@ -26,11 +26,11 @@
 
 <br>
 
-![Checked citations under an answer](docs/screenshots/grounding.png)
+![Checked citations under an answer](docs/images/grounding.png)
 
 *Each source is shown with the passage it contributed. A citation is marked verified only when its wording matches the text it points at.*
 
-![Create a workspace](docs/screenshots/signup.png)
+![Create a workspace](docs/images/signup.png)
 
 *Signing up creates the account and its workspace in one step, which is where the multi-tenancy starts. The background is raw WebGL, drawn without an animation library.*
 
