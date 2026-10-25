@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import EvalTrend from './eval-trend'
 import { scoreRun } from '@/lib/eval'
+import { toCopyText } from '@/lib/markdown'
 import type { EvalRun } from '@/lib/trend'
 
 interface Document {
@@ -388,7 +389,9 @@ export default function EvalPanel({ documents }: { documents: Document[] }) {
                 {r.error ? (
                   <p className="text-xs text-red-400">{r.error}</p>
                 ) : (
-                  <p className="text-xs text-bone/70">{r.answer}</p>
+                  // the answer arrives as markdown, and this row is one line of plain text,
+                  // so the symbols were showing through as literal ** and *
+                  <p className="text-xs text-bone/70">{toCopyText(r.answer)}</p>
                 )}
               </div>
             ))}

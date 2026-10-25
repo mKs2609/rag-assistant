@@ -55,6 +55,12 @@ export function toPlainText(
   return lines.join('\n')
 }
 
+// the header above is written with toLocaleString, so the filename has to use the local
+// date too. toISOString gives the UTC day, which is the previous one for anyone ahead of
+// UTC in the early hours: an export at 1am in India was named for yesterday.
 export function exportFilename(exportedAt: Date = new Date()): string {
-  return `conversation-${exportedAt.toISOString().slice(0, 10)}.txt`
+  const year = exportedAt.getFullYear()
+  const month = String(exportedAt.getMonth() + 1).padStart(2, '0')
+  const day = String(exportedAt.getDate()).padStart(2, '0')
+  return `conversation-${year}-${month}-${day}.txt`
 }

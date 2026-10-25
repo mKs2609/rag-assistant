@@ -109,13 +109,15 @@ export default function ChatBox({
   const { speak, stop: stopSpeaking, speakingId, isSupported: speechSupported } = useSpeechSynthesis()
 
   function handleExport() {
-    const blob = new Blob([toPlainText(messages, currentUserId)], {
+    // one timestamp for both, so the name and the header cannot disagree
+    const exportedAt = new Date()
+    const blob = new Blob([toPlainText(messages, currentUserId, exportedAt)], {
       type: 'text/plain;charset=utf-8',
     })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = exportFilename()
+    a.download = exportFilename(exportedAt)
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)

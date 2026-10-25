@@ -173,6 +173,13 @@ describe('toCopyText', () => {
     expect(toCopyText('## Heading\n\nA sentence.')).toBe('Heading\n\nA sentence.')
   })
 
+  // the evaluation panel shows one line of plain text per answer, so anything the parser
+  // leaves behind shows through there as a literal symbol
+  it('strips inline bold and italic rather than printing the asterisks', () => {
+    expect(toCopyText('**Engineering:** 42 people')).toBe('Engineering: 42 people')
+    expect(toCopyText('a *word* and a **phrase**')).toBe('a word and a phrase')
+  })
+
   it('keeps a code block fenced, so pasted code stays code', () => {
     expect(toCopyText('```sql\nselect 1\n```')).toBe('```sql\nselect 1\n```')
   })

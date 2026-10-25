@@ -71,6 +71,18 @@ describe('toPlainText', () => {
 
 describe('exportFilename', () => {
   it('names the file for the day it was exported', () => {
-    expect(exportFilename(new Date(Date.UTC(2026, 9, 14)))).toBe('conversation-2026-10-14.txt')
+    expect(exportFilename(new Date(Date.UTC(2026, 9, 14, 12)))).toBe('conversation-2026-10-14.txt')
+  })
+
+  // the file header is written with toLocaleString, so the name has to agree with it.
+  // toISOString would give the UTC day, which is still the 25th at this moment anywhere
+  // ahead of UTC, so the file was named for the day before the one printed inside it.
+  it('uses the local day, not the UTC one, so the name matches the header', () => {
+    const justAfterLocalMidnight = new Date(2026, 9, 26, 1, 11)
+    expect(exportFilename(justAfterLocalMidnight)).toBe('conversation-2026-10-26.txt')
+  })
+
+  it('pads single digit months and days', () => {
+    expect(exportFilename(new Date(2026, 0, 5, 12))).toBe('conversation-2026-01-05.txt')
   })
 })
