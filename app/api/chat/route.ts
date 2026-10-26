@@ -10,6 +10,12 @@ import { mergeMatches } from '@/lib/retrieval'
 // set time, because one was seen to hang for 61s, and nothing stopped this one doing the same
 const EMBED_TIMEOUT_MS = 20_000
 
+// a busy model has been seen to hold a request open for a minute or more. the evaluation
+// route has always bounded its calls; the chat did not, so a hung request left the reader
+// watching "writing the answer" with nothing to tell them it had stopped. long enough for
+// a genuinely slow answer, short enough that a hang becomes a message.
+const MODEL_TIMEOUT_MS = 60_000
+
 async function embedQuery(text: string): Promise<number[]> {
   const res = await fetch('https://api.voyageai.com/v1/embeddings', {
     method: 'POST',
@@ -297,6 +303,7 @@ ${context}`
           },
           {
             onRetry: () => send({ type: 'status', status: 'The model is busy, retrying…' }),
+            timeoutMs: MODEL_TIMEOUT_MS,
             // the day's allowance is twenty requests shared by everyone, so without this
             // the app simply stops answering once it is gone
             fallbackModel: FALLBACK_MODEL,

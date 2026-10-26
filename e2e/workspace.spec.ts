@@ -1,6 +1,17 @@
 import { test, expect } from '@playwright/test'
 import { createTestWorkspace, deleteTestWorkspace, logIn, type TestWorkspace } from './helpers'
 
+// the test's own budget has to cover what it waits for. processing can take 120s and the
+// loop can make three attempts, so with the old 150s per attempt a single slow upload put
+// the test past playwright's timeout and it died as "target page has been closed" instead
+// of failing with the reason. the app now abandons a hung model call at 60s, so waiting
+// longer than that per attempt only buys a teardown.
+const MODEL_WAIT_MS = 75_000
+const ATTEMPTS = 3
+
+// processing 120s + three attempts of 75s + the gaps between them, with room to spare
+test.describe.configure({ timeout: 7 * 60 * 1000 })
+
 let workspace: TestWorkspace | undefined
 
 test.beforeAll(async () => {
@@ -53,14 +64,14 @@ test('upload a document, ask about it, get a cited answer, then delete the quest
 
     // gemini returns 503 under load even after the app's own retries, so ask again
     let result = 'timeout'
-    for (let attempt = 1; attempt <= 3 && result !== 'answered' && result !== 'quota'; attempt++) {
+    for (let attempt = 1; attempt <= ATTEMPTS && result !== 'answered' && result !== 'quota'; attempt++) {
       await page.getByPlaceholder('Ask something about your documents...').fill(question)
       await page.getByRole('button', { name: 'Send' }).click()
 
       result = await Promise.race([
-        answered.waitFor({ state: 'visible', timeout: 150_000 }).then(() => 'answered').catch(() => 'timeout'),
-        modelBusy.waitFor({ state: 'visible', timeout: 150_000 }).then(() => 'busy').catch(() => 'timeout'),
-        quotaSpent.waitFor({ state: 'visible', timeout: 150_000 }).then(() => 'quota').catch(() => 'timeout'),
+        answered.waitFor({ state: 'visible', timeout: MODEL_WAIT_MS }).then(() => 'answered').catch(() => 'timeout'),
+        modelBusy.waitFor({ state: 'visible', timeout: MODEL_WAIT_MS }).then(() => 'busy').catch(() => 'timeout'),
+        quotaSpent.waitFor({ state: 'visible', timeout: MODEL_WAIT_MS }).then(() => 'quota').catch(() => 'timeout'),
       ])
 
       if (result !== 'answered' && result !== 'quota') await page.waitForTimeout(5_000)
