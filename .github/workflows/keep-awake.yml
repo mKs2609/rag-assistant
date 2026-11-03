@@ -1,0 +1,32 @@
+name: Keep awake
+
+# Supabase pauses a free project after seven days without activity, and the live demo is
+# linked from the README, so a paused project turns that link into an error page for anyone
+# who clicks it.
+#
+# Loading the sign in page is enough: proxy.ts refreshes the session on every request, which
+# is a Supabase Auth call. No keys are needed, so this workflow holds no secrets.
+#
+# The end-to-end workflow keeps the separate test project awake by running twice a week.
+# This one is only for the project behind the live site.
+
+on:
+  workflow_dispatch:
+  schedule:
+    # every third day, well inside the seven day window even when GitHub runs a schedule late
+    - cron: '0 7 */3 * *'
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Load the sign in page
+        run: |
+          code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 60 \
+            https://rag-assistant-gamma.vercel.app/login)
+          echo "GET /login -> $code"
+          if [ "$code" != "200" ]; then
+            echo "::error::The live site answered $code. If the Supabase project has paused, unpause it from the dashboard."
+            exit 1
+          fi

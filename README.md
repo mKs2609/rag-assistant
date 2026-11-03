@@ -193,7 +193,7 @@ Worth saying plainly: the first run of this ablation reported hybrid retrieval a
 | Deployment | Vercel |
 | Custom visuals | Raw WebGL via `ogl`, no animation library |
 | Tests | Vitest unit tests, and Playwright end-to-end tests in a real browser |
-| CI | GitHub Actions: lint, typecheck, unit tests and build on every push; end-to-end tests weekly and on demand |
+| CI | GitHub Actions: lint, typecheck, unit tests and build on every push; end-to-end tests twice a week and on demand; a three-daily ping so the free Supabase project behind the live demo does not pause |
 
 ## Getting started
 
@@ -239,7 +239,9 @@ They create and delete users and data, so they need **their own Supabase project
 2. Copy `.env.e2e.example` to `.env.e2e` and fill in that project's URL and keys
 3. Run `npm run test:e2e`
 
-In CI they run from the **E2E** workflow, weekly and on demand, using the same values stored as repository secrets. They call Voyage and Gemini for real, which is why they don't run on every push.
+In CI they run from the **E2E** workflow, on Mondays and Thursdays and on demand, using the same values stored as repository secrets. They call Voyage and Gemini for real, which is why they don't run on every push.
+
+Twice a week rather than weekly for a reason worth knowing: GitHub runs scheduled workflows late when it is busy, so the gaps between nominally weekly runs measured 7.0, 7.1 and 7.2 days. Supabase pauses a free project after seven days of inactivity, and a paused test project fails the run with a connection error that reads like a broken test.
 
 ## Project structure
 

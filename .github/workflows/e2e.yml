@@ -3,10 +3,15 @@ name: E2E
 # uses real Supabase, Voyage and Gemini, so it runs on demand and weekly rather than on every push.
 # 09:00 UTC is after the Gemini allowance resets at midnight Pacific, which 04:00 UTC was not: that
 # was late evening Pacific, so the run met an allowance the day's evaluation had already spent.
+#
+# Monday and Thursday, not weekly. Github delays scheduled runs under load, so the gaps between
+# "weekly" runs measured 7.0, 7.1 and 7.2 days, and Supabase pauses a free project after seven
+# days without activity. A paused test project fails the run with a connection error, which looks
+# like a broken test rather than a sleeping database. Twice a week keeps the gap near three days.
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 9 * * 1'
+    - cron: '0 9 * * 1,4'
 
 jobs:
   e2e:
