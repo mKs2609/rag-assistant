@@ -62,9 +62,14 @@ test('upload a document, ask about it, get a cited answer, then delete the quest
     const modelBusy = page.getByText('busy right now')
     const quotaSpent = page.getByText('daily free quota')
 
-    // gemini returns 503 under load even after the app's own retries, so ask again
+    // gemini returns 503 under load even after the app's own retries, so ask again. only a
+    // busy answer is worth retrying: the app clears the failed exchange when it reports one,
+    // so the conversation is clean. a silence leaves the first question sitting there
+    // unanswered, and asking again put a second copy in the thread, which the delete step
+    // below then found two of and failed on with an error about playwright rather than
+    // about the app.
     let result = 'timeout'
-    for (let attempt = 1; attempt <= ATTEMPTS && result !== 'answered' && result !== 'quota'; attempt++) {
+    for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
       await page.getByPlaceholder('Ask something about your documents...').fill(question)
       await page.getByRole('button', { name: 'Send' }).click()
 
@@ -74,7 +79,8 @@ test('upload a document, ask about it, get a cited answer, then delete the quest
         quotaSpent.waitFor({ state: 'visible', timeout: MODEL_WAIT_MS }).then(() => 'quota').catch(() => 'timeout'),
       ])
 
-      if (result !== 'answered' && result !== 'quota') await page.waitForTimeout(5_000)
+      if (result !== 'busy') break
+      await page.waitForTimeout(5_000)
     }
     return result
   })
@@ -85,7 +91,12 @@ test('upload a document, ask about it, get a cited answer, then delete the quest
   // fault in this pipeline, so the run reports skipped rather than failing. every other outcome,
   // including a wrong answer or a missing citation below, still fails.
   test.skip(outcome === 'quota', "today's free Gemini allowance is used up, so the answer could not be checked")
-  expect(outcome, 'the model never answered, it was busy on every attempt').toBe('answered')
+  expect(
+    outcome,
+    outcome === 'timeout'
+      ? `the page showed neither an answer nor an error within ${MODEL_WAIT_MS / 1000}s. the chat abandons a hung model call at 60s, so a silence longer than that is the app failing to report, not the model being slow`
+      : 'the model was busy on every attempt'
+  ).toBe('answered')
 
   await test.step('the answer cites the document it came from', async () => {
     const answered = page.getByTestId('assistant-message').filter({ hasText: code })
@@ -94,6 +105,12 @@ test('upload a document, ask about it, get a cited answer, then delete the quest
 
   await test.step('delete the question and its answer', async () => {
     const asked = page.getByTestId('user-message').filter({ hasText: question })
+    // say what we expect, so a stray second copy reads as a diagnosis rather than as
+    // playwright complaining that a locator matched twice
+    await expect(
+      asked,
+      'the question should be in the thread once. more than one means a failed attempt was left behind instead of being cleared'
+    ).toHaveCount(1)
     await asked.hover()
     await asked.getByRole('button', { name: 'Delete this message' }).click()
     await asked.getByRole('button', { name: 'Delete', exact: true }).click()
