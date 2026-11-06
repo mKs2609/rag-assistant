@@ -56,10 +56,25 @@ jobs:
           fi
           echo "All five secrets are present."
 
-      # a spent Gemini allowance reports as skipped rather than failed, so a green run with four
-      # of five tests is the expected shape on a day the evaluation set has used the allowance
+      # a spent Gemini allowance reports as skipped rather than failed, so a green run with six
+      # of seven tests is the expected shape on a day the evaluation set has used the allowance.
+      #
+      # the reason for a failure is echoed as an annotation because the job log needs a token to
+      # read, and the notification email carries annotations but not the log. without this every
+      # failure arrived as "process completed with exit code 1" and had to be reproduced locally
+      # before anyone could tell an outage from a broken test.
       - name: Run end-to-end tests
-        run: npx playwright test
+        run: |
+          set -o pipefail
+          npx playwright test 2>&1 | tee e2e-output.txt
+          status=$?
+          if [ $status -ne 0 ]; then
+            summary=$(grep -m1 -E '^[[:space:]]+[0-9]+ (failed|passed|skipped)' e2e-output.txt | sed 's/^[[:space:]]*//')
+            which=$(grep -m1 '✘' e2e-output.txt | sed 's/^[[:space:]]*//' | head -c 160)
+            why=$(grep -m1 -E '(Error|TimeoutError): ' e2e-output.txt | sed 's/^[[:space:]]*//' | head -c 300)
+            echo "::error::${summary:+$summary. }${which:+$which. }${why:-see the uploaded playwright-report artifact}"
+          fi
+          exit $status
 
       - name: Upload report
         if: failure()
