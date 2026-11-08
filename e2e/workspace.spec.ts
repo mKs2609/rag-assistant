@@ -4,8 +4,14 @@ import { createTestWorkspace, deleteTestWorkspace, logIn, type TestWorkspace } f
 // the test's own budget has to cover what it waits for. processing can take 120s and the
 // loop can make three attempts, so with the old 150s per attempt a single slow upload put
 // the test past playwright's timeout and it died as "target page has been closed" instead
-// of failing with the reason. the app now abandons a hung model call at 60s, so waiting
-// longer than that per attempt only buys a teardown.
+// of failing with the reason.
+//
+// the number below has to track what the chat actually allows itself: two model attempts
+// of 25 seconds, so about 51 seconds before it reports either an answer or an error. 75
+// leaves room for retrieval and the page catching up. an earlier version of this comment
+// claimed the chat gave up at 60s, which was true of one attempt and not of the three it
+// was making, and the test failed waiting for a message the app had not finished deciding
+// to send.
 const MODEL_WAIT_MS = 75_000
 const ATTEMPTS = 3
 
@@ -94,7 +100,7 @@ test('upload a document, ask about it, get a cited answer, then delete the quest
   expect(
     outcome,
     outcome === 'timeout'
-      ? `the page showed neither an answer nor an error within ${MODEL_WAIT_MS / 1000}s. the chat abandons a hung model call at 60s, so a silence longer than that is the app failing to report, not the model being slow`
+      ? `the page showed neither an answer nor an error within ${MODEL_WAIT_MS / 1000}s. the chat bounds itself to about 51s, two attempts of 25, so a longer silence is the app failing to report rather than the model being slow`
       : 'the model was busy on every attempt'
   ).toBe('answered')
 

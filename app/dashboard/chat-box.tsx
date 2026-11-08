@@ -38,7 +38,7 @@ interface Message {
   sources?: Source[]
   status?: string
   timings?: { embed: number; search: number; model: number; total: number }
-  /** set when the usual model was out of quota and a lighter one answered */
+  /** set when the usual model could not answer and a lighter one did */
   fallbackModel?: string
 }
 
@@ -444,7 +444,7 @@ export default function ChatBox({
                       <RichText text={m.content} />
                       {m.fallbackModel && (
                         <p className="text-[11px] text-pewter mt-2">
-                          The usual model was out of quota today, so this was answered by{' '}
+                          The usual model was unavailable, so this was answered by{' '}
                           <span className="font-mono">{m.fallbackModel}</span>.
                         </p>
                       )}

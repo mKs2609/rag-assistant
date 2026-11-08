@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   answerText,
+  shouldFallBack,
   geminiFailure,
   geminiErrorMessage,
   retryAfter,
@@ -208,5 +209,28 @@ describe('EVAL_MODEL', () => {
   it('is a lite model, so a run draws on its own allowance rather than the chat quota', () => {
     expect(EVAL_MODEL).toContain('lite')
     expect(takesThinkingBudget(EVAL_MODEL)).toBe(false)
+  })
+})
+
+describe('shouldFallBack', () => {
+  // the fallback first fired only on the daily allowance. a main model that hung produced a
+  // busy failure instead, so the reader was told the model was busy while the lighter model
+  // was up and answering in about a second.
+  it('tries the other model when this one has no allowance left', () => {
+    expect(shouldFallBack('quota-daily')).toBe(true)
+  })
+
+  it('tries the other model when this one is hanging or overloaded', () => {
+    expect(shouldFallBack('busy')).toBe(true)
+  })
+
+  it('tries the other model on a per minute limit, since it has its own allowance', () => {
+    expect(shouldFallBack('quota-rate')).toBe(true)
+  })
+
+  // a malformed request fails the same way wherever it is sent, so a second attempt only
+  // spends another request and buries the real error
+  it('does not try the other model when the request itself is wrong', () => {
+    expect(shouldFallBack('other')).toBe(false)
   })
 })

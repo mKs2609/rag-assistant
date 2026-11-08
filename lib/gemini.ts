@@ -85,15 +85,15 @@ export async function callGemini(
   const res = await requestOnce(method, body, model, options)
   if (res.ok || !fallbackModel || fallbackModel === model) return res
 
-  // running out of the day's allowance is the one failure another model can answer, so the
-  // app degrades to the lighter one instead of refusing for the rest of the day. read the
-  // body here because classifying the error needs it, and hand it back if we are not moving.
+  // read the body here because classifying the error needs it, and hand it back unchanged
+  // if we are not moving to the other model.
   const errorBody = await res.text()
-  if (geminiFailure(res.status, errorBody) !== 'quota-daily') {
+  const failure = geminiFailure(res.status, errorBody)
+  if (!shouldFallBack(failure)) {
     return new Response(errorBody, { status: res.status })
   }
 
-  console.error(`${model} is out of quota for today, answering with ${fallbackModel}`)
+  console.error(`${model} is unavailable (${failure}), answering with ${fallbackModel}`)
   onFallback?.(fallbackModel)
   return requestOnce(method, body, fallbackModel, options)
 }
@@ -166,6 +166,18 @@ export function retryAfter(body: string): string {
   if (seconds < 3600) return `about ${Math.round(seconds / 60)} minutes`
   const hours = Math.round(seconds / 3600)
   return hours === 1 ? 'about an hour' : `about ${hours} hours`
+}
+
+// whether another model is worth trying. the point of the fallback is to keep answering
+// when this model cannot, and from the reader's side a model that is out of allowance and
+// a model that is hanging are the same thing: no answer. it first fired only on the daily
+// allowance, so a main model timing out while the lighter one answered in a second still
+// reached the reader as "the model is busy".
+//
+// a malformed request is the exception. the other model would reject it the same way, so
+// sending it again only wastes a second request and hides the real error.
+export function shouldFallBack(failure: Failure): boolean {
+  return failure !== 'other'
 }
 
 export function geminiErrorMessage(status: number, body = ''): string {

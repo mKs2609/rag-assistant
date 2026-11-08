@@ -21,9 +21,13 @@ Run `lint`, `typecheck` and `test` before opening a pull request. CI runs all th
 on every push.
 
 The end-to-end run uses the real Gemini, whose free tier allows twenty requests a day on the main
-model. When that allowance is gone the question test reports skipped rather than failed, because a
-spent allowance is Google's accounting and not a fault here. Only that one test needs the model, so
-six of seven passing with one skipped is a healthy run. Anything else failing is real.
+model. When the main model cannot answer, whether its allowance is gone or the request is hanging,
+the call falls back to the lighter model, which has its own much larger allowance. Only a request
+the models would both reject the same way is passed straight back.
+
+If both allowances are gone the question test reports skipped rather than failed, because a spent
+allowance is Google's accounting and not a fault here. Only that one test needs the model, so six
+of seven passing with one skipped is a healthy run. Anything else failing is real.
 
 The workflow runs on Mondays and Thursdays rather than weekly, because Supabase pauses a free
 project after seven days idle and GitHub runs scheduled jobs late often enough that a weekly

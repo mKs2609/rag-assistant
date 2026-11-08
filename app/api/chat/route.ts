@@ -8,13 +8,24 @@ import { mergeMatches } from '@/lib/retrieval'
 
 // embedding one question takes about a second. the model calls already give up after a
 // set time, because one was seen to hang for 61s, and nothing stopped this one doing the same
+// retrieval, up to two model attempts and the streaming all have to fit in here. without
+// it the route took the platform's default, which is shorter than its own retry budget.
+export const maxDuration = 60
+
 const EMBED_TIMEOUT_MS = 20_000
 
 // a busy model has been seen to hold a request open for a minute or more. the evaluation
 // route has always bounded its calls; the chat did not, so a hung request left the reader
-// watching "writing the answer" with nothing to tell them it had stopped. long enough for
-// a genuinely slow answer, short enough that a hang becomes a message.
-const MODEL_TIMEOUT_MS = 60_000
+// watching "writing the answer" with nothing to tell them it had stopped.
+//
+// what matters is the total, not one attempt. bounding a single attempt at 60s while
+// callGemini still made three of them gave a worst case of over three minutes, which no
+// serverless function lives long enough to finish: the reader would have lost the stream
+// before any message arrived. two attempts of 25 seconds keeps the whole thing inside the
+// minute the platform allows, and 25 seconds is still generous for an answer that normally
+// streams in about three.
+const MODEL_TIMEOUT_MS = 25_000
+const MODEL_ATTEMPTS = 2
 
 async function embedQuery(text: string): Promise<number[]> {
   const res = await fetch('https://api.voyageai.com/v1/embeddings', {
@@ -304,12 +315,13 @@ ${context}`
           {
             onRetry: () => send({ type: 'status', status: 'The model is busy, retrying…' }),
             timeoutMs: MODEL_TIMEOUT_MS,
-            // the day's allowance is twenty requests shared by everyone, so without this
-            // the app simply stops answering once it is gone
+            maxAttempts: MODEL_ATTEMPTS,
+            // the day's allowance is twenty requests shared by everyone, and the model also
+            // hangs under load. without this the app simply stops answering in either case.
             fallbackModel: FALLBACK_MODEL,
             onFallback: (model) => {
               answeredBy = model
-              send({ type: 'status', status: 'Main model is out of quota, using the lighter one…' })
+              send({ type: 'status', status: 'The main model is unavailable, using the lighter one…' })
             },
           }
         )
