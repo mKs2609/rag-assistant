@@ -4,8 +4,14 @@ name: Keep awake
 # linked from the README, so a paused project turns that link into an error page for anyone
 # who clicks it.
 #
-# Loading the sign in page is enough: proxy.ts refreshes the session on every request, which
-# is a Supabase Auth call. No keys are needed, so this workflow holds no secrets.
+# This workflow used to load /login, on the assumption that proxy.ts refreshing the session
+# counted as activity. It does not. supabase.auth.getUser() returns AuthSessionMissingError
+# without making any request when there is no session cookie, so an anonymous page load reaches
+# Supabase zero times. The workflow passed every three days for weeks while the project went
+# idle, and Supabase scheduled it for pausing anyway.
+#
+# /api/health runs a real query instead, so a 200 here means the database answered. No keys are
+# needed, because they stay in the application's environment, so this workflow holds no secrets.
 #
 # The end-to-end workflow keeps the separate test project awake by running twice a week.
 # This one is only for the project behind the live site.
@@ -21,12 +27,23 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Load the sign in page
+      - name: Ask the application to query the database
         run: |
-          code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 60 \
-            https://rag-assistant-gamma.vercel.app/login)
-          echo "GET /login -> $code"
+          body=$(mktemp)
+          code=$(curl -sS -o "$body" -w '%{http_code}' --max-time 60 \
+            https://rag-assistant-gamma.vercel.app/api/health)
+          echo "GET /api/health -> $code"
+          cat "$body"; echo
+
           if [ "$code" != "200" ]; then
-            echo "::error::The live site answered $code. If the Supabase project has paused, unpause it from the dashboard."
+            echo "::error::The health check answered $code rather than 200. If the Supabase project has paused, unpause it from the dashboard."
             exit 1
           fi
+
+          # a 200 whose body is not ok:true would mean the route changed shape and this check
+          # had quietly stopped proving anything, which is the failure this workflow already had
+          if ! grep -q '"ok":true' "$body"; then
+            echo "::error::The health check returned 200 but not ok:true, so it is no longer proving the database was reached."
+            exit 1
+          fi
+          echo "The database answered."
