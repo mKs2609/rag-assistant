@@ -31,8 +31,13 @@ of seven passing with one skipped is a healthy run. Anything else failing is rea
 
 The workflow runs on Mondays and Thursdays rather than weekly, because Supabase pauses a free
 project after seven days idle and GitHub runs scheduled jobs late often enough that a weekly
-cadence drifted past that. A separate three-daily ping keeps the project behind the live demo
-awake the same way.
+cadence drifted past that.
+
+A separate three-daily ping keeps the project behind the live demo awake. It must call an endpoint
+that really queries the database, which is why `/api/health` exists. The first version loaded the
+sign in page, on the assumption that the proxy refreshing the session counted; `auth.getUser()`
+returns without making a request when there is no session cookie, so that ping reached Supabase
+zero times and passed every run while the project was scheduled for pausing.
 
 ## Layout
 
