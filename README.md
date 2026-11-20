@@ -193,7 +193,7 @@ Worth saying plainly: the first run of this ablation reported hybrid retrieval a
 | Deployment | Vercel |
 | Custom visuals | Raw WebGL via `ogl`, no animation library |
 | Tests | Vitest unit tests, and Playwright end-to-end tests in a real browser |
-| CI | GitHub Actions: lint, typecheck, unit tests and build on every push; end-to-end tests twice a week and on demand; a three-daily ping so the free Supabase project behind the live demo does not pause |
+| CI | GitHub Actions: lint, typecheck, unit tests and build on every push; end-to-end tests twice a week and on demand; a daily ping so the free Supabase project behind the live demo does not pause |
 
 ## Getting started
 

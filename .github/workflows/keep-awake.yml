@@ -19,8 +19,10 @@ name: Keep awake
 on:
   workflow_dispatch:
   schedule:
-    # every third day, well inside the seven day window even when GitHub runs a schedule late
-    - cron: '0 7 */3 * *'
+    # Supabase describes "a few user requests to the database each day over the previous week" as
+    # typically enough. Every third day was about two a week, under that, so this runs daily. GitHub
+    # often starts a schedule hours late, which daily absorbs and a three day gap did not.
+    - cron: '0 7 * * *'
 
 jobs:
   ping:
